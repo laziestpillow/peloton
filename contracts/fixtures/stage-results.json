@@ -1,0 +1,47 @@
+{
+  "stageId": "stage-001",
+  "markerResults": [
+    {
+      "markerId": "marker-sprint-001",
+      "type": "sprint",
+      "crossings": [
+        { "riderId": "rider-001", "crossedAtSeconds": 1498, "rank": 1, "points": 20 },
+        { "riderId": "rider-002", "crossedAtSeconds": 1506, "rank": 2, "points": 17 }
+      ]
+    },
+    {
+      "markerId": "marker-climb-001",
+      "type": "climb",
+      "crossings": [
+        { "riderId": "rider-002", "crossedAtSeconds": 2997, "rank": 1, "points": 10 },
+        { "riderId": "rider-001", "crossedAtSeconds": 3011, "rank": 2, "points": 8 }
+      ]
+    }
+  ],
+  "classifications": [
+    {
+      "stageId": "stage-001",
+      "riderId": "rider-001",
+      "sprintPoints": 20,
+      "komPoints": 8,
+      "finishBonus": 5,
+      "todayTotal": 33,
+      "gcTimeSeconds": 5890
+    },
+    {
+      "stageId": "stage-001",
+      "riderId": "rider-002",
+      "sprintPoints": 17,
+      "komPoints": 10,
+      "finishBonus": 3,
+      "todayTotal": 30,
+      "gcTimeSeconds": 5924
+    }
+  ],
+  "jerseyLeaders": {
+    "green": "rider-001",
+    "polkaDot": "rider-002",
+    "yellow": "rider-001"
+  }
+}
+

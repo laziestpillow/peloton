@@ -1,0 +1,664 @@
+openapi: 3.1.0
+info:
+  title: Peloton API
+  version: 0.1.0
+  description: Contract between the Peloton iOS app and backend service.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Authentication
+  - name: Integrations
+  - name: Activities
+  - name: Riders
+  - name: Groups
+  - name: Stages
+  - name: Seasons
+paths:
+  /v1/auth/strava/start:
+    post:
+      operationId: startStravaAuthorization
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Authorization URL and expiring state metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StravaAuthorizationStart"
+  /v1/auth/strava/callback:
+    get:
+      operationId: completeStravaAuthorization
+      tags: [Authentication]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/StravaCode"
+        - $ref: "#/components/parameters/OAuthState"
+      responses:
+        "302":
+          description: Redirects back to the Peloton application.
+        "400":
+          $ref: "#/components/responses/Error"
+  /v1/integrations/strava:
+    delete:
+      operationId: disconnectStrava
+      tags: [Integrations]
+      responses:
+        "204":
+          description: Strava connection disconnected.
+  /v1/integrations/strava/status:
+    get:
+      operationId: getStravaStatus
+      tags: [Integrations]
+      responses:
+        "200":
+          description: Current Strava integration status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StravaIntegrationStatus"
+  /v1/activities/sync:
+    post:
+      operationId: syncActivities
+      tags: [Activities]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Synchronization accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivitySyncResponse"
+  /v1/activities:
+    get:
+      operationId: listActivities
+      tags: [Activities]
+      parameters:
+        - $ref: "#/components/parameters/PageCursor"
+        - $ref: "#/components/parameters/PageLimit"
+      responses:
+        "200":
+          description: Imported activities.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityListResponse"
+  /v1/activities/{activityId}:
+    get:
+      operationId: getActivity
+      tags: [Activities]
+      parameters:
+        - $ref: "#/components/parameters/ActivityId"
+      responses:
+        "200":
+          description: Imported activity detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportedActivity"
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/riders/me:
+    get:
+      operationId: getCurrentRider
+      tags: [Riders]
+      responses:
+        "200":
+          description: Current rider profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiderProfile"
+  /v1/riders/me/appearance:
+    patch:
+      operationId: updateCurrentRiderAppearance
+      tags: [Riders]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RiderAppearance"
+      responses:
+        "200":
+          description: Updated rider profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiderProfile"
+  /v1/groups:
+    post:
+      operationId: createGroup
+      tags: [Groups]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+  /v1/groups/{groupId}:
+    get:
+      operationId: getGroup
+      tags: [Groups]
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          description: Group detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+  /v1/groups/{groupId}/members:
+    post:
+      operationId: addGroupMember
+      tags: [Groups]
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [riderId]
+              properties:
+                riderId:
+                  type: string
+      responses:
+        "201":
+          description: Group membership.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMembership"
+  /v1/groups/{groupId}/stages:
+    get:
+      operationId: listGroupStages
+      tags: [Stages]
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          description: Stages for a group.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Stage"
+  /v1/stages/{stageId}:
+    get:
+      operationId: getStage
+      tags: [Stages]
+      parameters:
+        - $ref: "#/components/parameters/StageId"
+      responses:
+        "200":
+          description: Stage detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stage"
+  /v1/stages/{stageId}/recap:
+    get:
+      operationId: getStageRecap
+      tags: [Stages]
+      parameters:
+        - $ref: "#/components/parameters/StageId"
+      responses:
+        "200":
+          description: Normalized recap timeline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StageRecap"
+  /v1/stages/{stageId}/results:
+    get:
+      operationId: getStageResults
+      tags: [Stages]
+      parameters:
+        - $ref: "#/components/parameters/StageId"
+      responses:
+        "200":
+          description: Stage results and jersey leaders.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StageResultsResponse"
+  /v1/seasons/{seasonId}/standings:
+    get:
+      operationId: getSeasonStandings
+      tags: [Seasons]
+      parameters:
+        - $ref: "#/components/parameters/SeasonId"
+      responses:
+        "200":
+          description: Season standings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeasonStandingsResponse"
+  /v1/seasons/{seasonId}/archetypes:
+    get:
+      operationId: getSeasonArchetypes
+      tags: [Seasons]
+      parameters:
+        - $ref: "#/components/parameters/SeasonId"
+      responses:
+        "200":
+          description: Rider archetypes for a season.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ArchetypeSnapshot"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: PelotonSession
+  parameters:
+    ActivityId:
+      name: activityId
+      in: path
+      required: true
+      schema: { type: string }
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema: { type: string }
+    StageId:
+      name: stageId
+      in: path
+      required: true
+      schema: { type: string }
+    SeasonId:
+      name: seasonId
+      in: path
+      required: true
+      schema: { type: string }
+    PageCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string }
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, minLength: 8, maxLength: 128 }
+      description: Reuse this key to safely retry mutation requests.
+    StravaCode:
+      name: code
+      in: query
+      required: true
+      schema: { type: string }
+    OAuthState:
+      name: state
+      in: query
+      required: true
+      schema: { type: string }
+  responses:
+    Error:
+      description: Error response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            requestId: { type: string }
+    StravaAuthorizationStart:
+      type: object
+      required: [authorizationUrl, stateExpiresAt]
+      properties:
+        authorizationUrl: { type: string, format: uri }
+        stateExpiresAt: { type: string, format: date-time }
+    StravaIntegrationStatus:
+      type: object
+      required: [status, acceptedScopes, lastSyncedAt]
+      properties:
+        status:
+          type: string
+          enum: [notConnected, connected, expired, error, revoked]
+        acceptedScopes:
+          type: array
+          items: { type: string }
+        lastSyncedAt:
+          type: [string, "null"]
+          format: date-time
+    ActivitySyncResponse:
+      type: object
+      required: [status, requestedAt]
+      properties:
+        status:
+          type: string
+          enum: [accepted, alreadyRunning]
+        requestedAt: { type: string, format: date-time }
+    ActivityListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportedActivity"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+    Pagination:
+      type: object
+      required: [nextCursor]
+      properties:
+        nextCursor:
+          type: [string, "null"]
+    RiderProfile:
+      type: object
+      required: [id, userId, displayName, appearance, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        displayName: { type: string }
+        appearance:
+          $ref: "#/components/schemas/RiderAppearance"
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RiderAppearance:
+      type: object
+      required: [jerseyColor, accentColor, helmetColor, bikeColor, pattern]
+      properties:
+        jerseyColor: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        accentColor: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        helmetColor: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        bikeColor: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        pattern:
+          type: string
+          enum: [solid, stripes, polkaDots]
+    ImportedActivity:
+      type: object
+      required: [id, riderId, provider, providerActivityId, activityType, startedAt, distanceMeters, elapsedTimeSeconds, movingTimeSeconds, elevationGainMeters, routeSummary, importStatus, processedStageId]
+      properties:
+        id: { type: string }
+        riderId: { type: string }
+        provider:
+          type: string
+          enum: [strava, fixture]
+        providerActivityId: { type: string }
+        activityType:
+          type: string
+          enum: [ride]
+        startedAt: { type: string, format: date-time }
+        distanceMeters: { type: number }
+        elapsedTimeSeconds: { type: integer }
+        movingTimeSeconds: { type: integer }
+        elevationGainMeters: { type: number }
+        routeSummary:
+          $ref: "#/components/schemas/RouteSummary"
+        importStatus:
+          type: string
+          enum: [eligible, processing, processed, duplicate, unsupported, failed]
+        processedStageId:
+          type: [string, "null"]
+    RouteSummary:
+      type: object
+      required: [polyline, previewBounds]
+      properties:
+        polyline: { type: string }
+        previewBounds:
+          type: object
+          required: [southWest, northEast]
+          properties:
+            southWest:
+              $ref: "#/components/schemas/GeoPoint"
+            northEast:
+              $ref: "#/components/schemas/GeoPoint"
+    GeoPoint:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number }
+        longitude: { type: number }
+    Group:
+      type: object
+      required: [id, name, ownerId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ownerId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    GroupMembership:
+      type: object
+      required: [groupId, riderId, role, status, joinedAt]
+      properties:
+        groupId: { type: string }
+        riderId: { type: string }
+        role:
+          type: string
+          enum: [owner, member]
+        status:
+          type: string
+          enum: [active, invited, removed]
+        joinedAt: { type: string, format: date-time }
+    Stage:
+      type: object
+      required: [id, seasonId, name, route, orderedMarkers, scheduledAt, status]
+      properties:
+        id: { type: string }
+        seasonId: { type: string }
+        name: { type: string }
+        route:
+          $ref: "#/components/schemas/RouteProfile"
+        orderedMarkers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Marker"
+        scheduledAt: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [scheduled, active, completed]
+    RouteProfile:
+      type: object
+      required: [distanceMeters, elevation]
+      properties:
+        distanceMeters: { type: number }
+        elevation:
+          type: array
+          items:
+            type: object
+            required: [positionMeters, altitudeMeters]
+            properties:
+              positionMeters: { type: number }
+              altitudeMeters: { type: number }
+    Marker:
+      type: object
+      required: [id, type, positionMeters, latitude, longitude, geofenceRadiusMeters, pointsSchedule]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [sprint, climb]
+        positionMeters: { type: number }
+        latitude: { type: number }
+        longitude: { type: number }
+        geofenceRadiusMeters: { type: number }
+        category:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 4
+        pointsSchedule:
+          type: array
+          items: { type: integer }
+    StageRecap:
+      type: object
+      required: [stageId, durationSeconds, riders, markers, timeline]
+      properties:
+        stageId: { type: string }
+        durationSeconds: { type: integer }
+        riders:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiderProfile"
+        markers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Marker"
+        timeline:
+          type: array
+          items:
+            type: object
+            required: [timeSeconds, positions]
+            properties:
+              timeSeconds: { type: integer }
+              positions:
+                type: array
+                items:
+                  type: object
+                  required: [riderId, positionMeters, speedMetersPerSecond]
+                  properties:
+                    riderId: { type: string }
+                    positionMeters: { type: number }
+                    speedMetersPerSecond: { type: number }
+                    markerEventId:
+                      type: [string, "null"]
+    StageResultsResponse:
+      type: object
+      required: [stageId, markerResults, classifications, jerseyLeaders]
+      properties:
+        stageId: { type: string }
+        markerResults:
+          type: array
+          items:
+            type: object
+            required: [markerId, type, crossings]
+            properties:
+              markerId: { type: string }
+              type:
+                type: string
+                enum: [sprint, climb]
+              crossings:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarkerCrossing"
+        classifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/StageResult"
+        jerseyLeaders:
+          type: object
+          required: [green, polkaDot, yellow]
+          properties:
+            green: { type: string }
+            polkaDot: { type: string }
+            yellow: { type: string }
+    MarkerCrossing:
+      type: object
+      required: [riderId, crossedAtSeconds, rank, points]
+      properties:
+        riderId: { type: string }
+        crossedAtSeconds: { type: integer }
+        rank: { type: integer }
+        points: { type: integer }
+    StageResult:
+      type: object
+      required: [stageId, riderId, sprintPoints, komPoints, finishBonus, todayTotal, gcTimeSeconds]
+      properties:
+        stageId: { type: string }
+        riderId: { type: string }
+        sprintPoints: { type: integer }
+        komPoints: { type: integer }
+        finishBonus: { type: integer }
+        todayTotal: { type: integer }
+        gcTimeSeconds: { type: integer }
+    SeasonStandingsResponse:
+      type: object
+      required: [seasonId, standings]
+      properties:
+        seasonId: { type: string }
+        standings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SeasonStanding"
+    SeasonStanding:
+      type: object
+      required: [seasonId, riderId, seasonTotal, rank, previousRank]
+      properties:
+        seasonId: { type: string }
+        riderId: { type: string }
+        seasonTotal: { type: integer }
+        rank: { type: integer }
+        previousRank:
+          type: [integer, "null"]
+    ArchetypeSnapshot:
+      type: object
+      required: [seasonId, riderId, archetype, confidence, sampleSize, sprintRelativeScore, climbRelativeScore, shortEffortScore, sustainedEffortScore, effectiveAt, reasons]
+      properties:
+        seasonId: { type: string }
+        riderId: { type: string }
+        archetype:
+          type: string
+          enum: [rookie, climber, sprinter, allRounder, puncheur, rouleur]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        sampleSize: { type: integer }
+        sprintRelativeScore: { type: number }
+        climbRelativeScore: { type: number }
+        shortEffortScore: { type: number }
+        sustainedEffortScore: { type: number }
+        effectiveAt: { type: string, format: date-time }
+        reasons:
+          type: array
+          items: { type: string }
+

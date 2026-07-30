@@ -1,0 +1,20 @@
+{
+  "seasonId": "season-001",
+  "standings": [
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-001",
+      "seasonTotal": 84,
+      "rank": 1,
+      "previousRank": 2
+    },
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-002",
+      "seasonTotal": 79,
+      "rank": 2,
+      "previousRank": 1
+    }
+  ]
+}
+

@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      node-development:
+        patterns:
+          - "*"
+  - package-ecosystem: npm
+    directory: /services/api
+    schedule:
+      interval: weekly
+  - package-ecosystem: swift
+    directory: /packages/ios/PelotonAPIClient
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+

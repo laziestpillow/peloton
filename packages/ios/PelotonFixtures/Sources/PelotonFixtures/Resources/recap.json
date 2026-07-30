@@ -1,0 +1,30 @@
+{
+  "stageId": "stage-001",
+  "durationSeconds": 3600,
+  "riders": [
+    {
+      "id": "rider-001",
+      "userId": "user-001",
+      "displayName": "Marta",
+      "appearance": {
+        "jerseyColor": "#2F80ED",
+        "accentColor": "#F2C94C",
+        "helmetColor": "#FFFFFF",
+        "bikeColor": "#111111",
+        "pattern": "stripes"
+      },
+      "createdAt": "2026-07-01T10:00:00Z",
+      "updatedAt": "2026-07-20T10:00:00Z"
+    }
+  ],
+  "markers": [],
+  "timeline": [
+    {
+      "timeSeconds": 0,
+      "positions": [
+        { "riderId": "rider-001", "positionMeters": 0, "speedMetersPerSecond": 8.8, "markerEventId": null }
+      ]
+    }
+  ]
+}
+

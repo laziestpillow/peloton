@@ -1,0 +1,21 @@
+{
+  "stageId": "stage-001",
+  "markerResults": [],
+  "classifications": [
+    {
+      "stageId": "stage-001",
+      "riderId": "rider-001",
+      "sprintPoints": 20,
+      "komPoints": 8,
+      "finishBonus": 5,
+      "todayTotal": 33,
+      "gcTimeSeconds": 5890
+    }
+  ],
+  "jerseyLeaders": {
+    "green": "rider-001",
+    "polkaDot": "rider-001",
+    "yellow": "rider-001"
+  }
+}
+

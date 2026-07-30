@@ -1,0 +1,26 @@
+name: iOS CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve Swift packages
+        run: |
+          swift package --package-path packages/ios/PelotonCore resolve
+          swift package --package-path packages/ios/PelotonFixtures resolve
+          swift package --package-path packages/ios/PelotonDesignSystem resolve
+          swift package --package-path packages/ios/PelotonAPIClient resolve
+      - name: Test Swift packages
+        run: |
+          swift test --package-path packages/ios/PelotonCore
+          swift test --package-path packages/ios/PelotonFixtures
+          swift test --package-path packages/ios/PelotonAPIClient
+      - name: Build app
+        run: xcodebuild -project apps/ios/Peloton.xcodeproj -scheme Peloton -destination 'platform=iOS Simulator,name=iPhone 17' build
+

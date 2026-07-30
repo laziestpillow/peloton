@@ -1,0 +1,6 @@
+/apps/ios/ @ios-owner
+/packages/ios/ @ios-owner
+/services/api/ @backend-owner
+/contracts/ @ios-owner @backend-owner
+/docs/ @ios-owner @backend-owner
+

@@ -1,0 +1,11 @@
+{
+  "name": "peloton",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "lint": "pnpm --filter @peloton/api lint",
+    "test": "pnpm --filter @peloton/api test",
+    "contract:check": "pnpm --filter @peloton/api contract:check"
+  },
+  "devDependencies": {}
+}

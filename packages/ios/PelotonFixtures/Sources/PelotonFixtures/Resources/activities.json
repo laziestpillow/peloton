@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "id": "activity-001",
+      "riderId": "rider-001",
+      "provider": "fixture",
+      "providerActivityId": "fixture-ride-001",
+      "activityType": "ride",
+      "startedAt": "2026-07-18T07:30:00Z",
+      "distanceMeters": 42195,
+      "elapsedTimeSeconds": 6120,
+      "movingTimeSeconds": 5890,
+      "elevationGainMeters": 680,
+      "routeSummary": {
+        "polyline": "fixture_polyline",
+        "previewBounds": {
+          "southWest": { "latitude": 41.34, "longitude": 2.08 },
+          "northEast": { "latitude": 41.46, "longitude": 2.22 }
+        }
+      },
+      "importStatus": "processed",
+      "processedStageId": "stage-001"
+    }
+  ],
+  "pagination": { "nextCursor": null }
+}
+

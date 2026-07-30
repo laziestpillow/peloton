@@ -1,0 +1,210 @@
+// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {
+  };
+  objectVersion = 77;
+  objects = {
+
+/* Begin PBXBuildFile section */
+    A10000000000000000000001 /* PelotonApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* PelotonApp.swift */; };
+    A10000000000000000000002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* RootView.swift */; };
+    A10000000000000000000003 /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* AuthenticationView.swift */; };
+    A10000000000000000000004 /* GarageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* GarageView.swift */; };
+    A10000000000000000000005 /* ActivitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ActivitiesView.swift */; };
+    A10000000000000000000006 /* RecapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* RecapView.swift */; };
+    A10000000000000000000007 /* ResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* ResultsView.swift */; };
+    A10000000000000000000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* Assets.xcassets */; };
+    A10000000000000000000009 /* PelotonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* PelotonTests.swift */; };
+    A10000000000000000000010 /* PelotonUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* PelotonUITests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+    A30000000000000000000001 /* PBXContainerItemProxy */ = {
+      isa = PBXContainerItemProxy;
+      containerPortal = A40000000000000000000001 /* Project object */;
+      proxyType = 1;
+      remoteGlobalIDString = A50000000000000000000001;
+      remoteInfo = Peloton;
+    };
+    A30000000000000000000002 /* PBXContainerItemProxy */ = {
+      isa = PBXContainerItemProxy;
+      containerPortal = A40000000000000000000001 /* Project object */;
+      proxyType = 1;
+      remoteGlobalIDString = A50000000000000000000001;
+      remoteInfo = Peloton;
+    };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+    A20000000000000000000001 /* PelotonApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/PelotonApp.swift; sourceTree = "<group>"; };
+    A20000000000000000000002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/RootView.swift; sourceTree = "<group>"; };
+    A20000000000000000000003 /* AuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Authentication/AuthenticationView.swift; sourceTree = "<group>"; };
+    A20000000000000000000004 /* GarageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Garage/GarageView.swift; sourceTree = "<group>"; };
+    A20000000000000000000005 /* ActivitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Activities/ActivitiesView.swift; sourceTree = "<group>"; };
+    A20000000000000000000006 /* RecapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Recap/RecapView.swift; sourceTree = "<group>"; };
+    A20000000000000000000007 /* ResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Results/ResultsView.swift; sourceTree = "<group>"; };
+    A20000000000000000000008 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
+    A20000000000000000000009 /* PelotonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PelotonTests.swift; sourceTree = "<group>"; };
+    A20000000000000000000010 /* PelotonUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PelotonUITests.swift; sourceTree = "<group>"; };
+    A20000000000000000000011 /* Peloton.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Peloton.app; sourceTree = BUILT_PRODUCTS_DIR; };
+    A20000000000000000000012 /* PelotonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PelotonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+    A20000000000000000000013 /* PelotonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PelotonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+    A60000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+    A60000000000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+    A60000000000000000000003 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+    A70000000000000000000001 = {
+      isa = PBXGroup;
+      children = (
+        A70000000000000000000002 /* Peloton */,
+        A70000000000000000000003 /* PelotonTests */,
+        A70000000000000000000004 /* PelotonUITests */,
+        A70000000000000000000005 /* Products */,
+      );
+      sourceTree = "<group>";
+    };
+    A70000000000000000000002 /* Peloton */ = {
+      isa = PBXGroup;
+      children = (
+        A20000000000000000000001 /* PelotonApp.swift */,
+        A20000000000000000000002 /* RootView.swift */,
+        A20000000000000000000003 /* AuthenticationView.swift */,
+        A20000000000000000000004 /* GarageView.swift */,
+        A20000000000000000000005 /* ActivitiesView.swift */,
+        A20000000000000000000006 /* RecapView.swift */,
+        A20000000000000000000007 /* ResultsView.swift */,
+        A20000000000000000000008 /* Assets.xcassets */,
+      );
+      path = Peloton;
+      sourceTree = "<group>";
+    };
+    A70000000000000000000003 /* PelotonTests */ = {
+      isa = PBXGroup;
+      children = (A20000000000000000000009 /* PelotonTests.swift */);
+      path = PelotonTests;
+      sourceTree = "<group>";
+    };
+    A70000000000000000000004 /* PelotonUITests */ = {
+      isa = PBXGroup;
+      children = (A20000000000000000000010 /* PelotonUITests.swift */);
+      path = PelotonUITests;
+      sourceTree = "<group>";
+    };
+    A70000000000000000000005 /* Products */ = {
+      isa = PBXGroup;
+      children = (
+        A20000000000000000000011 /* Peloton.app */,
+        A20000000000000000000012 /* PelotonTests.xctest */,
+        A20000000000000000000013 /* PelotonUITests.xctest */,
+      );
+      name = Products;
+      sourceTree = "<group>";
+    };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+    A50000000000000000000001 /* Peloton */ = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = A80000000000000000000001 /* Build configuration list for PBXNativeTarget "Peloton" */;
+      buildPhases = (A90000000000000000000001 /* Sources */, A60000000000000000000001 /* Frameworks */, AA0000000000000000000001 /* Resources */);
+      buildRules = ();
+      dependencies = ();
+      name = Peloton;
+      productName = Peloton;
+      productReference = A20000000000000000000011 /* Peloton.app */;
+      productType = "com.apple.product-type.application";
+    };
+    A50000000000000000000002 /* PelotonTests */ = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = A80000000000000000000002 /* Build configuration list for PBXNativeTarget "PelotonTests" */;
+      buildPhases = (A90000000000000000000002 /* Sources */, A60000000000000000000002 /* Frameworks */, AA0000000000000000000002 /* Resources */);
+      buildRules = ();
+      dependencies = (AB0000000000000000000001 /* PBXTargetDependency */);
+      name = PelotonTests;
+      productName = PelotonTests;
+      productReference = A20000000000000000000012 /* PelotonTests.xctest */;
+      productType = "com.apple.product-type.bundle.unit-test";
+    };
+    A50000000000000000000003 /* PelotonUITests */ = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = A80000000000000000000003 /* Build configuration list for PBXNativeTarget "PelotonUITests" */;
+      buildPhases = (A90000000000000000000003 /* Sources */, A60000000000000000000003 /* Frameworks */, AA0000000000000000000003 /* Resources */);
+      buildRules = ();
+      dependencies = (AB0000000000000000000002 /* PBXTargetDependency */);
+      name = PelotonUITests;
+      productName = PelotonUITests;
+      productReference = A20000000000000000000013 /* PelotonUITests.xctest */;
+      productType = "com.apple.product-type.bundle.ui-testing";
+    };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+    A40000000000000000000001 /* Project object */ = {
+      isa = PBXProject;
+      attributes = {
+        BuildIndependentTargetsInParallel = 1;
+        LastSwiftUpdateCheck = 2660;
+        LastUpgradeCheck = 2660;
+        TargetAttributes = {
+          A50000000000000000000001 = { CreatedOnToolsVersion = 26.6; };
+          A50000000000000000000002 = { CreatedOnToolsVersion = 26.6; TestTargetID = A50000000000000000000001; };
+          A50000000000000000000003 = { CreatedOnToolsVersion = 26.6; TestTargetID = A50000000000000000000001; };
+        };
+      };
+      buildConfigurationList = A80000000000000000000000 /* Build configuration list for PBXProject "Peloton" */;
+      compatibilityVersion = "Xcode 16.0";
+      developmentRegion = en;
+      hasScannedForEncodings = 0;
+      knownRegions = (en, Base);
+      mainGroup = A70000000000000000000001;
+      productRefGroup = A70000000000000000000005 /* Products */;
+      projectDirPath = "";
+      projectRoot = "";
+      targets = (A50000000000000000000001 /* Peloton */, A50000000000000000000002 /* PelotonTests */, A50000000000000000000003 /* PelotonUITests */);
+    };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+    AA0000000000000000000001 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000008 /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+    AA0000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+    AA0000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+    A90000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007); runOnlyForDeploymentPostprocessing = 0; };
+    A90000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000009); runOnlyForDeploymentPostprocessing = 0; };
+    A90000000000000000000003 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000010); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+    AB0000000000000000000001 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A50000000000000000000001 /* Peloton */; targetProxy = A30000000000000000000001 /* PBXContainerItemProxy */; };
+    AB0000000000000000000002 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A50000000000000000000001 /* Peloton */; targetProxy = A30000000000000000000002 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+    AC0000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ANALYZER_NONNULL = YES; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_STRICT_OBJC_MSGSEND = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_NO_COMMON_BLOCKS = YES; GCC_WARN_64_TO_32_BIT_CONVERSION = YES; GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR; GCC_WARN_UNDECLARED_SELECTOR = YES; GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE; GCC_WARN_UNUSED_FUNCTION = YES; GCC_WARN_UNUSED_VARIABLE = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SDKROOT = iphoneos; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
+    AC0000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ANALYZER_NONNULL = YES; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; COPY_PHASE_STRIP = NO; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; ENABLE_NS_ASSERTIONS = NO; ENABLE_STRICT_OBJC_MSGSEND = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_NO_COMMON_BLOCKS = YES; GCC_WARN_64_TO_32_BIT_CONVERSION = YES; GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR; GCC_WARN_UNDECLARED_SELECTOR = YES; GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE; GCC_WARN_UNUSED_FUNCTION = YES; GCC_WARN_UNUSED_VARIABLE = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; VALIDATE_PRODUCT = YES; }; name = Release; };
+    AC0000000000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = Peloton; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports"; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.peloton; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+    AC0000000000000000000004 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = Peloton; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports"; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.peloton; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+    AC0000000000000000000005 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.peloton.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Peloton.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Peloton"; }; name = Debug; };
+    AC0000000000000000000006 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.peloton.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Peloton.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Peloton"; }; name = Release; };
+    AC0000000000000000000007 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.peloton.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.0; TEST_TARGET_NAME = Peloton; }; name = Debug; };
+    AC0000000000000000000008 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.peloton.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.0; TEST_TARGET_NAME = Peloton; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+    A80000000000000000000000 /* Build configuration list for PBXProject "Peloton" */ = {isa = XCConfigurationList; buildConfigurations = (AC0000000000000000000001 /* Debug */, AC0000000000000000000002 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+    A80000000000000000000001 /* Build configuration list for PBXNativeTarget "Peloton" */ = {isa = XCConfigurationList; buildConfigurations = (AC0000000000000000000003 /* Debug */, AC0000000000000000000004 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+    A80000000000000000000002 /* Build configuration list for PBXNativeTarget "PelotonTests" */ = {isa = XCConfigurationList; buildConfigurations = (AC0000000000000000000005 /* Debug */, AC0000000000000000000006 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+    A80000000000000000000003 /* Build configuration list for PBXNativeTarget "PelotonUITests" */ = {isa = XCConfigurationList; buildConfigurations = (AC0000000000000000000007 /* Debug */, AC0000000000000000000008 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+  };
+  rootObject = A40000000000000000000001 /* Project object */;
+}
+

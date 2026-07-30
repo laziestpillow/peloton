@@ -1,0 +1,23 @@
+- name: area:ios
+  color: "1f77b4"
+- name: area:backend
+  color: "2ca02c"
+- name: area:contract
+  color: "9467bd"
+- name: area:infrastructure
+  color: "7f7f7f"
+- name: area:design
+  color: "e377c2"
+- name: type:feature
+  color: "0e8a16"
+- name: type:bug
+  color: "d73a4a"
+- name: type:technical-debt
+  color: "fbca04"
+- name: priority:high
+  color: "b60205"
+- name: good-first-issue
+  color: "7057ff"
+- name: blocked
+  color: "000000"
+
