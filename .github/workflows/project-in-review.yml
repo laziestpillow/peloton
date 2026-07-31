@@ -18,7 +18,7 @@ jobs:
     name: Move linked issues to In Review
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+      GH_TOKEN: ${{ secrets.PROJECTS_TOKEN || github.token }}
       PROJECT_OWNER: laziestpillow
       PROJECT_NUMBER: "1"
       STATUS_FIELD: Status
@@ -28,7 +28,7 @@ jobs:
       - name: Validate token
         run: |
           if [ -z "${GH_TOKEN}" ]; then
-            echo "PROJECTS_TOKEN is required to update user project fields."
+            echo "PROJECTS_TOKEN or github.token is required to update user project fields."
             exit 1
           fi
 
