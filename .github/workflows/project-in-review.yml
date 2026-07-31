@@ -1,0 +1,143 @@
+name: Project In Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  move-linked-issues:
+    name: Move linked issues to In Review
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECTS_TOKEN || github.token }}
+      PROJECT_OWNER: laziestpillow
+      PROJECT_NUMBER: "1"
+      REPOSITORY: ${{ github.repository }}
+      STATUS_FIELD: Status
+      TARGET_STATUS: In Review
+      PR_BODY: ${{ github.event.pull_request.body }}
+    steps:
+      - name: Validate token
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "PROJECTS_TOKEN or github.token is required to update user project fields."
+            exit 1
+          fi
+
+      - name: Move linked issues to In Review
+        run: |
+          set -euo pipefail
+
+          issue_numbers="$(printf '%s\n' "${PR_BODY}" |
+            grep -Eio '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+' |
+            grep -Eo '[0-9]+' |
+            sort -u || true)"
+
+          if [ -z "${issue_numbers}" ]; then
+            echo "No linked issues found in PR body."
+            exit 0
+          fi
+
+          project_data="$(gh api graphql \
+            -F login="${PROJECT_OWNER}" \
+            -F number="${PROJECT_NUMBER}" \
+            -f query='
+              query($login: String!, $number: Int!) {
+                user(login: $login) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 100) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            number
+                            repository {
+                              nameWithOwner
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }')"
+
+          project_id="$(printf '%s' "${project_data}" | jq -r '.data.user.projectV2.id // empty')"
+          status_field_id="$(printf '%s' "${project_data}" |
+            jq -r --arg name "${STATUS_FIELD}" \
+              '.data.user.projectV2.fields.nodes[] | select(.name == $name) | .id')"
+          target_status_id="$(printf '%s' "${project_data}" |
+            jq -r --arg field "${STATUS_FIELD}" --arg option "${TARGET_STATUS}" \
+              '.data.user.projectV2.fields.nodes[] | select(.name == $field) | .options[] | select(.name == $option) | .id')"
+
+          if [ -z "${project_id}" ] || [ "${project_id}" = "null" ]; then
+            echo "Project ${PROJECT_OWNER}/${PROJECT_NUMBER} was not found or token cannot access it."
+            exit 1
+          fi
+
+          if [ -z "${status_field_id}" ] || [ "${status_field_id}" = "null" ]; then
+            echo "Project field '${STATUS_FIELD}' was not found."
+            exit 1
+          fi
+
+          if [ -z "${target_status_id}" ] || [ "${target_status_id}" = "null" ]; then
+            echo "Project status option '${TARGET_STATUS}' was not found."
+            exit 1
+          fi
+
+          for issue_number in ${issue_numbers}; do
+            item_id="$(printf '%s' "${project_data}" |
+              jq -r --argjson number "${issue_number}" --arg repo "${REPOSITORY}" \
+                '.data.user.projectV2.items.nodes[] |
+                  select(.content.number == $number and .content.repository.nameWithOwner == $repo) |
+                  .id')"
+
+            if [ -z "${item_id}" ]; then
+              echo "Issue #${issue_number} is not in project ${PROJECT_OWNER}/${PROJECT_NUMBER}; skipping."
+              continue
+            fi
+
+            gh api graphql \
+              -F projectId="${project_id}" \
+              -F itemId="${item_id}" \
+              -F fieldId="${status_field_id}" \
+              -F optionId="${target_status_id}" \
+              -f query='
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { singleSelectOptionId: $optionId }
+                  }) {
+                    projectV2Item {
+                      id
+                    }
+                  }
+                }' \
+              >/dev/null
+
+            echo "Moved issue #${issue_number} to ${TARGET_STATUS}."
+          done
