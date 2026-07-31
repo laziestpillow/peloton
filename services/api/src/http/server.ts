@@ -4,24 +4,46 @@ import swaggerUi from "@fastify/swagger-ui";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import YAML from "yaml";
+import { loadApiFixtureData, type ApiFixtureData } from "../application/fixtureData.js";
 import type { AppConfig } from "../config/env.js";
-import {
-  getActivity,
-  getCurrentRider,
-  getSeasonArchetypes,
-  getSeasonStandings,
-  getStageRecap,
-  getStageResults,
-  listActivities
-} from "../application/useCases.js";
+import { createApplicationUseCases, type ApplicationRepository, type ApplicationUseCases } from "../application/useCases.js";
+import type { RiderAppearance } from "../domain/models.js";
+import { createDatabaseConnection, type DatabaseConnection } from "../infrastructure/database/client.js";
+import { FixtureRepository } from "../infrastructure/repositories/FixtureRepository.js";
+import { PostgresRepository } from "../infrastructure/repositories/PostgresRepository.js";
 
-export async function buildServer(config: AppConfig) {
+export interface ServerOptions {
+  repository?: ApplicationRepository;
+}
+
+function createRepository(config: AppConfig, fixtureData: ApiFixtureData): { repository: ApplicationRepository; connection?: DatabaseConnection } {
+  if (config.DATA_SOURCE === "fixture") {
+    return { repository: new FixtureRepository(fixtureData) };
+  }
+
+  const connection = createDatabaseConnection(config.DATABASE_URL);
+  return {
+    repository: new PostgresRepository(connection.db),
+    connection
+  };
+}
+
+export async function buildServer(config: AppConfig, options: ServerOptions = {}) {
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
       redact: ["req.headers.authorization", "strava.accessToken", "strava.refreshToken"]
     }
   });
+  const fixtureData = await loadApiFixtureData();
+  const liveRepository = options.repository ? { repository: options.repository } : createRepository(config, fixtureData);
+  const useCases: ApplicationUseCases = createApplicationUseCases(liveRepository.repository, config.CURRENT_USER_ID, fixtureData);
+
+  if (liveRepository.connection) {
+    app.addHook("onClose", async () => {
+      await liveRepository.connection?.pool.end();
+    });
+  }
 
   const openApiText = await readFile(resolve(process.cwd(), "../../contracts/openapi.yaml"), "utf8");
   await app.register(swagger, { mode: "static", specification: { document: YAML.parse(openApiText) } });
@@ -51,44 +73,37 @@ export async function buildServer(config: AppConfig) {
     requestedAt: new Date().toISOString()
   }));
 
-  app.get("/v1/activities", async () => listActivities());
+  app.get("/v1/activities", async () => useCases.listActivities());
   app.get<{ Params: { activityId: string } }>("/v1/activities/:activityId", async (request, reply) => {
-    const activity = await getActivity(request.params.activityId);
+    const activity = await useCases.getActivity(request.params.activityId);
     if (!activity) {
       return reply.status(404).send({ error: { code: "not_found", message: "Activity not found." } });
     }
     return activity;
   });
 
-  app.get("/v1/riders/me", async () => getCurrentRider());
-  app.patch("/v1/riders/me/appearance", async (request) => ({
-    ...await getCurrentRider(),
-    appearance: request.body
-  }));
+  app.get("/v1/riders/me", async () => useCases.getCurrentRider());
+  app.patch<{ Body: RiderAppearance }>("/v1/riders/me/appearance", async (request) => useCases.updateCurrentRiderAppearance(request.body));
 
-  app.post("/v1/groups", async (_request, reply) => reply.status(201).send({
-    id: "group-001",
-    name: "Fixture Club",
-    ownerId: "user-001",
-    createdAt: "2026-07-01T10:00:00Z",
-    updatedAt: "2026-07-01T10:00:00Z"
-  }));
+  app.post<{ Body: { name?: string } }>("/v1/groups", async (request, reply) => {
+    const input = request.body?.name ? { name: request.body.name } : {};
+    return reply.status(201).send(await useCases.createGroup(input));
+  });
 
-  app.get("/v1/groups/:groupId", async () => ({
-    id: "group-001",
-    name: "Fixture Club",
-    ownerId: "user-001",
-    createdAt: "2026-07-01T10:00:00Z",
-    updatedAt: "2026-07-01T10:00:00Z"
-  }));
+  app.get<{ Params: { groupId: string } }>("/v1/groups/:groupId", async (request, reply) => {
+    const group = await useCases.getGroup(request.params.groupId);
+    if (!group) {
+      return reply.status(404).send({ error: { code: "not_found", message: "Group not found." } });
+    }
+    return group;
+  });
 
-  app.post<{ Params: { groupId: string }; Body: { riderId: string } }>("/v1/groups/:groupId/members", async (request, reply) => reply.status(201).send({
-    groupId: request.params.groupId,
-    riderId: request.body.riderId,
-    role: "member",
-    status: "active",
-    joinedAt: new Date().toISOString()
-  }));
+  app.post<{ Params: { groupId: string }; Body: { riderId: string } }>("/v1/groups/:groupId/members", async (request, reply) => {
+    return reply.status(201).send(await useCases.addGroupMember({
+      groupId: request.params.groupId,
+      riderId: request.body.riderId
+    }));
+  });
 
   app.get("/v1/groups/:groupId/stages", async () => ({
     data: [
@@ -113,11 +128,10 @@ export async function buildServer(config: AppConfig) {
     scheduledAt: "2026-07-18T07:30:00Z",
     status: "completed"
   }));
-  app.get("/v1/stages/:stageId/recap", async () => getStageRecap());
-  app.get("/v1/stages/:stageId/results", async () => getStageResults());
-  app.get("/v1/seasons/:seasonId/standings", async () => getSeasonStandings());
-  app.get("/v1/seasons/:seasonId/archetypes", async () => getSeasonArchetypes());
+  app.get("/v1/stages/:stageId/recap", async () => useCases.getStageRecap());
+  app.get("/v1/stages/:stageId/results", async () => useCases.getStageResults());
+  app.get("/v1/seasons/:seasonId/standings", async () => useCases.getSeasonStandings());
+  app.get("/v1/seasons/:seasonId/archetypes", async () => useCases.getSeasonArchetypes());
 
   return app;
 }
-
