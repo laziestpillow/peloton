@@ -13,7 +13,11 @@ public struct FixtureDataClient: PelotonDataClient {
   private let decoder: JSONDecoder
   private let bundle: Bundle
 
-  public init(bundle: Bundle = .module) {
+  public init() {
+    self.init(bundle: .module)
+  }
+
+  public init(bundle: Bundle) {
     self.bundle = bundle
     decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -56,4 +60,3 @@ public enum FixtureError: Error, Equatable {
   case missingResource(String)
   case missingRider
 }
-
