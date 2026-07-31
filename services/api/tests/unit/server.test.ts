@@ -3,6 +3,7 @@ import { buildServer } from "../../src/http/server.js";
 import type { AppConfig } from "../../src/config/env.js";
 import { loadApiFixtureData } from "../../src/application/fixtureData.js";
 import { FixtureRepository } from "../../src/infrastructure/repositories/FixtureRepository.js";
+import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
 
 const config: AppConfig = {
   NODE_ENV: "test",
@@ -16,7 +17,12 @@ const config: AppConfig = {
   API_PORT: 8080,
   DATABASE_URL: "postgres://peloton:peloton@127.0.0.1:5432/peloton",
   LOG_LEVEL: "silent",
+  STRAVA_CLIENT_ID: "12345",
+  STRAVA_CLIENT_SECRET: "test-secret",
   STRAVA_CALLBACK_URL: "http://127.0.0.1:8080/v1/auth/strava/callback",
+  STRAVA_OAUTH_SCOPE: "read,activity:read_all",
+  STRAVA_OAUTH_STATE_TTL_SECONDS: 600,
+  STRAVA_TOKEN_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000",
   APP_DEEP_LINK_URL: "peloton://strava/callback"
 };
 
@@ -81,14 +87,61 @@ describe("server repository-backed routes", () => {
 
   test("leaves health and Strava callback public", async () => {
     const repository = new FixtureRepository(await loadApiFixtureData());
-    const app = await buildServer(config, { repository });
+    const app = await buildServer(config, { repository, stravaGateway: new MockStravaGateway() });
 
     try {
       const health = await app.inject({ method: "GET", url: "/health" });
       expect(health.statusCode).toBe(200);
 
-      const callback = await app.inject({ method: "GET", url: "/v1/auth/strava/callback?code=abc&state=xyz" });
+      const callback = await app.inject({ method: "GET", url: "/v1/auth/strava/callback" });
+      expect(callback.statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("creates Strava authorization state and completes callback without exposing tokens", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository, stravaGateway: new MockStravaGateway() });
+
+    try {
+      const start = await app.inject({ method: "POST", url: "/v1/auth/strava/start", headers: userOneAuth });
+      expect(start.statusCode).toBe(200);
+      const startBody = start.json();
+      const authorizationUrl = new URL(startBody.authorizationUrl);
+      expect(authorizationUrl.origin).toBe("https://www.strava.com");
+      expect(authorizationUrl.searchParams.get("client_id")).toBe("12345");
+      expect(authorizationUrl.searchParams.get("redirect_uri")).toBe(config.STRAVA_CALLBACK_URL);
+      expect(authorizationUrl.searchParams.get("scope")).toBe(config.STRAVA_OAUTH_SCOPE);
+      expect(startBody).not.toHaveProperty("accessToken");
+      expect(startBody).not.toHaveProperty("refreshToken");
+
+      const callback = await app.inject({
+        method: "GET",
+        url: `/v1/auth/strava/callback?code=accepted-code&scope=read,activity:read_all&state=${authorizationUrl.searchParams.get("state")}`
+      });
       expect(callback.statusCode).toBe(302);
+      expect(callback.headers.location).toBe("peloton://strava/callback?status=connected");
+      expect(callback.body).not.toContain("mock-access");
+      expect(callback.body).not.toContain("mock-refresh");
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("rejects replayed Strava OAuth callback state", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository, stravaGateway: new MockStravaGateway() });
+
+    try {
+      const start = await app.inject({ method: "POST", url: "/v1/auth/strava/start", headers: userOneAuth });
+      const state = new URL(start.json().authorizationUrl).searchParams.get("state");
+      const first = await app.inject({ method: "GET", url: `/v1/auth/strava/callback?code=first&state=${state}` });
+      expect(first.statusCode).toBe(302);
+
+      const second = await app.inject({ method: "GET", url: `/v1/auth/strava/callback?code=second&state=${state}` });
+      expect(second.statusCode).toBe(400);
+      expect(second.json()).toEqual({ error: { code: "bad_request", message: "Strava authorization state was already used." } });
     } finally {
       await app.close();
     }

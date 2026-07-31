@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ApiFixtureData } from "../../application/fixtureData.js";
-import type { ApplicationRepository } from "../../application/useCases.js";
+import type { ApplicationRepository, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
   Group,
@@ -11,6 +11,9 @@ import type {
 } from "../../domain/models.js";
 
 export class FixtureRepository implements ApplicationRepository {
+  private readonly stravaOAuthStates = new Map<string, StravaOAuthState>();
+  private readonly stravaConnections = new Map<string, StravaConnectionInput>();
+
   constructor(private readonly fixtureData: ApiFixtureData) {}
 
   async listActivities(userId: string): Promise<ActivityListResponse> {
@@ -81,5 +84,24 @@ export class FixtureRepository implements ApplicationRepository {
       status: "active",
       joinedAt: new Date().toISOString()
     };
+  }
+
+  async createStravaOAuthState(input: StravaOAuthState): Promise<void> {
+    this.stravaOAuthStates.set(input.state, input);
+  }
+
+  async getStravaOAuthState(state: string): Promise<StravaOAuthState | null> {
+    return this.stravaOAuthStates.get(state) ?? null;
+  }
+
+  async consumeStravaOAuthState(input: { state: string; consumedAt: Date }): Promise<void> {
+    const state = this.stravaOAuthStates.get(input.state);
+    if (state) {
+      this.stravaOAuthStates.set(input.state, { ...state, consumedAt: input.consumedAt });
+    }
+  }
+
+  async upsertStravaConnection(input: StravaConnectionInput): Promise<void> {
+    this.stravaConnections.set(input.userId, input);
   }
 }
