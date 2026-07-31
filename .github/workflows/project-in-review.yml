@@ -1,0 +1,96 @@
+name: Project In Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  move-linked-issues:
+    name: Move linked issues to In Review
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+      PROJECT_OWNER: laziestpillow
+      PROJECT_NUMBER: "1"
+      STATUS_FIELD: Status
+      TARGET_STATUS: In Review
+      PR_BODY: ${{ github.event.pull_request.body }}
+    steps:
+      - name: Validate token
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "PROJECTS_TOKEN is required to update user project fields."
+            exit 1
+          fi
+
+      - name: Move linked issues to In Review
+        run: |
+          set -euo pipefail
+
+          issue_numbers="$(printf '%s\n' "${PR_BODY}" |
+            grep -Eio '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+' |
+            grep -Eo '[0-9]+' |
+            sort -u || true)"
+
+          if [ -z "${issue_numbers}" ]; then
+            echo "No linked issues found in PR body."
+            exit 0
+          fi
+
+          project_json="$(gh project view "${PROJECT_NUMBER}" \
+            --owner "${PROJECT_OWNER}" \
+            --format json)"
+          project_id="$(printf '%s' "${project_json}" | jq -r '.id')"
+
+          fields_json="$(gh project field-list "${PROJECT_NUMBER}" \
+            --owner "${PROJECT_OWNER}" \
+            --format json \
+            --limit 100)"
+          status_field_id="$(printf '%s' "${fields_json}" |
+            jq -r --arg name "${STATUS_FIELD}" \
+              '.fields[] | select(.name == $name) | .id')"
+          target_status_id="$(printf '%s' "${fields_json}" |
+            jq -r --arg field "${STATUS_FIELD}" --arg option "${TARGET_STATUS}" \
+              '.fields[] | select(.name == $field) | .options[] | select(.name == $option) | .id')"
+
+          if [ -z "${status_field_id}" ] || [ "${status_field_id}" = "null" ]; then
+            echo "Project field '${STATUS_FIELD}' was not found."
+            exit 1
+          fi
+
+          if [ -z "${target_status_id}" ] || [ "${target_status_id}" = "null" ]; then
+            echo "Project status option '${TARGET_STATUS}' was not found."
+            exit 1
+          fi
+
+          for issue_number in ${issue_numbers}; do
+            item_json="$(gh project item-list "${PROJECT_NUMBER}" \
+              --owner "${PROJECT_OWNER}" \
+              --format json \
+              --limit 100 \
+              --jq ".items[] | select(.content.number == ${issue_number})")"
+
+            item_id="$(printf '%s' "${item_json}" | jq -r '.id // empty')"
+
+            if [ -z "${item_id}" ]; then
+              echo "Issue #${issue_number} is not in project ${PROJECT_OWNER}/${PROJECT_NUMBER}; skipping."
+              continue
+            fi
+
+            gh project item-edit \
+              --id "${item_id}" \
+              --project-id "${project_id}" \
+              --field-id "${status_field_id}" \
+              --single-select-option-id "${target_status_id}"
+
+            echo "Moved issue #${issue_number} to ${TARGET_STATUS}."
+          done
