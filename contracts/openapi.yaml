@@ -30,6 +30,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StravaAuthorizationStart"
+        "400":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
         "429":
@@ -41,10 +43,11 @@ paths:
       security: []
       parameters:
         - $ref: "#/components/parameters/StravaCode"
+        - $ref: "#/components/parameters/StravaError"
         - $ref: "#/components/parameters/OAuthState"
       responses:
         "302":
-          description: Redirects back to the Peloton application.
+          description: Redirects back to the Peloton application with connection result metadata.
         "400":
           $ref: "#/components/responses/Error"
   /v1/integrations/strava:
@@ -413,7 +416,12 @@ components:
     StravaCode:
       name: code
       in: query
-      required: true
+      required: false
+      schema: { type: string }
+    StravaError:
+      name: error
+      in: query
+      required: false
       schema: { type: string }
     OAuthState:
       name: state

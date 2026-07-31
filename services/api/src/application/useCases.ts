@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { ApiFixtureData } from "./fixtureData.js";
 import type {
   ActivityListResponse,
@@ -7,6 +8,39 @@ import type {
   RiderAppearance,
   RiderProfile
 } from "../domain/models.js";
+import type { StravaGateway } from "../infrastructure/strava/StravaGateway.js";
+import type { TokenCipher } from "../infrastructure/strava/TokenCipher.js";
+
+export interface StravaOAuthState {
+  state: string;
+  userId: string;
+  redirectUrl: string;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface StravaConnectionInput {
+  userId: string;
+  athleteId: string;
+  acceptedScopes: readonly string[];
+  encryptedAccessToken: string;
+  encryptedRefreshToken: string;
+  accessTokenExpiresAt: Date;
+  status: "connected" | "expired" | "error" | "revoked";
+}
+
+export interface ApplicationServices {
+  stravaGateway: StravaGateway;
+  tokenCipher: TokenCipher;
+  stravaClientId: string;
+  stravaClientSecret: string;
+  stravaCallbackUrl: string;
+  appDeepLinkUrl: string;
+  stravaOAuthScope: string;
+  stravaOAuthStateTtlSeconds: number;
+  now?: () => Date;
+}
 
 export interface ApplicationRepository {
   listActivities(userId: string): Promise<ActivityListResponse>;
@@ -17,6 +51,10 @@ export interface ApplicationRepository {
   getGroup(groupId: string): Promise<Group | null>;
   getGroupMembershipForUser(input: { groupId: string; userId: string }): Promise<GroupMembership | null>;
   addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership>;
+  createStravaOAuthState(input: StravaOAuthState): Promise<void>;
+  getStravaOAuthState(state: string): Promise<StravaOAuthState | null>;
+  consumeStravaOAuthState(input: { state: string; consumedAt: Date }): Promise<void>;
+  upsertStravaConnection(input: StravaConnectionInput): Promise<void>;
 }
 
 export interface ApplicationUseCases {
@@ -27,6 +65,8 @@ export interface ApplicationUseCases {
   createGroup(input: { name?: string }): Promise<Group>;
   getGroup(groupId: string): Promise<Group | null>;
   addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership>;
+  startStravaAuthorization(): Promise<{ authorizationUrl: string; stateExpiresAt: string }>;
+  completeStravaAuthorization(input: { code?: string; state: string; scope?: string; error?: string }): Promise<{ redirectUrl: string }>;
   getStageRecap(): Promise<unknown>;
   getStageResults(): Promise<unknown>;
   getSeasonStandings(): Promise<unknown>;
@@ -35,8 +75,8 @@ export interface ApplicationUseCases {
 
 export class ApplicationError extends Error {
   constructor(
-    readonly statusCode: 401 | 403 | 404,
-    readonly code: "unauthorized" | "forbidden" | "not_found",
+    readonly statusCode: 400 | 401 | 403 | 404,
+    readonly code: "bad_request" | "unauthorized" | "forbidden" | "not_found",
     message: string
   ) {
     super(message);
@@ -46,8 +86,30 @@ export class ApplicationError extends Error {
 export function createApplicationUseCases(
   repository: ApplicationRepository,
   currentUserId: string,
-  fixtureData: ApiFixtureData
+  fixtureData: ApiFixtureData,
+  services?: ApplicationServices
 ): ApplicationUseCases {
+  const now = () => services?.now?.() ?? new Date();
+
+  function appendDeepLinkResult(status: "connected" | "error", reason?: string): string {
+    const url = new URL(services?.appDeepLinkUrl ?? "peloton://strava/callback");
+    url.searchParams.set("status", status);
+    if (reason) {
+      url.searchParams.set("reason", reason);
+    }
+    return url.toString();
+  }
+
+  function requireStravaServices(): ApplicationServices {
+    if (!services) {
+      throw new ApplicationError(400, "bad_request", "Strava integration is not configured.");
+    }
+    if (!services.stravaClientId || !services.stravaClientSecret) {
+      throw new ApplicationError(400, "bad_request", "Strava client credentials are not configured.");
+    }
+    return services;
+  }
+
   async function getCurrentRiderOrThrow(): Promise<RiderProfile> {
     const rider = await repository.getCurrentRider(currentUserId);
     if (!rider) {
@@ -93,6 +155,78 @@ export function createApplicationUseCases(
         throw new ApplicationError(403, "forbidden", "Only the group owner can add members.");
       }
       return repository.addGroupMember(input);
+    },
+    async startStravaAuthorization() {
+      const strava = requireStravaServices();
+      await getCurrentRiderOrThrow();
+      const createdAt = now();
+      const expiresAt = new Date(createdAt.getTime() + strava.stravaOAuthStateTtlSeconds * 1000);
+      const state = randomBytes(32).toString("base64url");
+      await repository.createStravaOAuthState({
+        state,
+        userId: currentUserId,
+        redirectUrl: strava.stravaCallbackUrl,
+        expiresAt,
+        consumedAt: null,
+        createdAt
+      });
+
+      const authorizationUrl = new URL("https://www.strava.com/oauth/authorize");
+      authorizationUrl.searchParams.set("client_id", strava.stravaClientId);
+      authorizationUrl.searchParams.set("redirect_uri", strava.stravaCallbackUrl);
+      authorizationUrl.searchParams.set("response_type", "code");
+      authorizationUrl.searchParams.set("approval_prompt", "auto");
+      authorizationUrl.searchParams.set("scope", strava.stravaOAuthScope);
+      authorizationUrl.searchParams.set("state", state);
+
+      return { authorizationUrl: authorizationUrl.toString(), stateExpiresAt: expiresAt.toISOString() };
+    },
+    async completeStravaAuthorization(input) {
+      const strava = requireStravaServices();
+      const state = await repository.getStravaOAuthState(input.state);
+      if (!state) {
+        throw new ApplicationError(400, "bad_request", "Invalid Strava authorization state.");
+      }
+      if (state.consumedAt) {
+        throw new ApplicationError(400, "bad_request", "Strava authorization state was already used.");
+      }
+      if (state.expiresAt.getTime() <= now().getTime()) {
+        throw new ApplicationError(400, "bad_request", "Strava authorization state has expired.");
+      }
+
+      const consumedAt = now();
+      await repository.consumeStravaOAuthState({ state: input.state, consumedAt });
+
+      if (input.error) {
+        return { redirectUrl: appendDeepLinkResult("error", input.error) };
+      }
+      if (!input.code) {
+        throw new ApplicationError(400, "bad_request", "Missing Strava authorization code.");
+      }
+
+      let tokenExchange;
+      try {
+        tokenExchange = await strava.stravaGateway.exchangeAuthorizationCode({
+          clientId: strava.stravaClientId,
+          clientSecret: strava.stravaClientSecret,
+          code: input.code,
+          ...(input.scope ? { acceptedScope: input.scope } : {})
+        });
+      } catch {
+        return { redirectUrl: appendDeepLinkResult("error", "token_exchange_failed") };
+      }
+
+      await repository.upsertStravaConnection({
+        userId: state.userId,
+        athleteId: tokenExchange.athleteId,
+        acceptedScopes: tokenExchange.acceptedScopes,
+        encryptedAccessToken: strava.tokenCipher.encrypt(tokenExchange.accessToken),
+        encryptedRefreshToken: strava.tokenCipher.encrypt(tokenExchange.refreshToken),
+        accessTokenExpiresAt: tokenExchange.expiresAt,
+        status: "connected"
+      });
+
+      return { redirectUrl: appendDeepLinkResult("connected") };
     },
     getStageRecap: async () => fixtureData.recap,
     getStageResults: async () => fixtureData.stageResults,

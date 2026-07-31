@@ -15,7 +15,32 @@ const envSchema = z.object({
   STRAVA_CLIENT_ID: z.string().optional(),
   STRAVA_CLIENT_SECRET: z.string().optional(),
   STRAVA_CALLBACK_URL: z.string().url().default("http://127.0.0.1:8080/v1/auth/strava/callback"),
+  STRAVA_OAUTH_SCOPE: z.string().default("read,activity:read_all"),
+  STRAVA_OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+  STRAVA_TOKEN_ENCRYPTION_KEY: z.string().default("0000000000000000000000000000000000000000000000000000000000000000"),
   APP_DEEP_LINK_URL: z.string().default("peloton://strava/callback")
+}).superRefine((value, context) => {
+  if (value.NODE_ENV !== "production" && value.NODE_ENV !== "staging") {
+    return;
+  }
+
+  for (const key of ["STRAVA_CLIENT_ID", "STRAVA_CLIENT_SECRET"] as const) {
+    if (!value[key]) {
+      context.addIssue({
+        code: "custom",
+        path: [key],
+        message: `${key} is required in ${value.NODE_ENV}.`
+      });
+    }
+  }
+
+  if (!/^[0-9a-fA-F]{64}$/u.test(value.STRAVA_TOKEN_ENCRYPTION_KEY)) {
+    context.addIssue({
+      code: "custom",
+      path: ["STRAVA_TOKEN_ENCRYPTION_KEY"],
+      message: "STRAVA_TOKEN_ENCRYPTION_KEY must be a 32-byte hex string in live environments."
+    });
+  }
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

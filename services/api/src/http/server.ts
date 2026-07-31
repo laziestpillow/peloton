@@ -11,10 +11,13 @@ import type { RiderAppearance } from "../domain/models.js";
 import { createDatabaseConnection, type DatabaseConnection } from "../infrastructure/database/client.js";
 import { FixtureRepository } from "../infrastructure/repositories/FixtureRepository.js";
 import { PostgresRepository } from "../infrastructure/repositories/PostgresRepository.js";
+import { HttpStravaGateway, type StravaGateway } from "../infrastructure/strava/StravaGateway.js";
+import { createTokenCipher } from "../infrastructure/strava/TokenCipher.js";
 import { createSessionPreHandler } from "./auth.js";
 
 export interface ServerOptions {
   repository?: ApplicationRepository;
+  stravaGateway?: StravaGateway;
 }
 
 function createRepository(config: AppConfig, fixtureData: ApiFixtureData): { repository: ApplicationRepository; connection?: DatabaseConnection } {
@@ -33,12 +36,31 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
-      redact: ["req.headers.authorization", "strava.accessToken", "strava.refreshToken"]
+      redact: [
+        "req.headers.authorization",
+        "req.query.code",
+        "strava.accessToken",
+        "strava.refreshToken",
+        "accessToken",
+        "refreshToken",
+        "clientSecret"
+      ]
     }
   });
   const fixtureData = await loadApiFixtureData();
   const liveRepository = options.repository ? { repository: options.repository } : createRepository(config, fixtureData);
-  const createUseCasesForUser = (userId: string): ApplicationUseCases => createApplicationUseCases(liveRepository.repository, userId, fixtureData);
+  const stravaGateway = options.stravaGateway ?? new HttpStravaGateway();
+  const tokenCipher = createTokenCipher(config.STRAVA_TOKEN_ENCRYPTION_KEY);
+  const createUseCasesForUser = (userId: string): ApplicationUseCases => createApplicationUseCases(liveRepository.repository, userId, fixtureData, {
+    stravaGateway,
+    tokenCipher,
+    stravaClientId: config.STRAVA_CLIENT_ID ?? "",
+    stravaClientSecret: config.STRAVA_CLIENT_SECRET ?? "",
+    stravaCallbackUrl: config.STRAVA_CALLBACK_URL,
+    appDeepLinkUrl: config.APP_DEEP_LINK_URL,
+    stravaOAuthScope: config.STRAVA_OAUTH_SCOPE,
+    stravaOAuthStateTtlSeconds: config.STRAVA_OAUTH_STATE_TTL_SECONDS
+  });
 
   if (liveRepository.connection) {
     app.addHook("onClose", async () => {
@@ -51,7 +73,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   await app.register(swaggerUi, { routePrefix: "/docs" });
   app.addHook("preHandler", createSessionPreHandler(config));
 
-  function sendError(reply: FastifyReply, statusCode: 401 | 403 | 404, code: string, message: string) {
+  function sendError(reply: FastifyReply, statusCode: 400 | 401 | 403 | 404, code: string, message: string) {
     return reply.status(statusCode).send({ error: { code, message } });
   }
 
@@ -70,15 +92,26 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   app.get("/health", async () => ({ status: "ok" }));
 
   app.post("/v1/auth/strava/start", async (request) => {
-    getUseCases(request);
-    return {
-      authorizationUrl: "https://www.strava.com/oauth/authorize?client_id=fixture&response_type=code&state=fixture-state",
-      stateExpiresAt: "2026-07-30T14:00:00Z"
-    };
+    const useCases = getUseCases(request);
+    return useCases.startStravaAuthorization();
   });
 
-  app.get("/v1/auth/strava/callback", async (_request, reply) => {
-    return reply.redirect(config.APP_DEEP_LINK_URL);
+  app.get<{ Querystring: { code?: string; state?: string; scope?: string; error?: string } }>("/v1/auth/strava/callback", async (request, reply) => {
+    if (!request.query.state) {
+      return sendError(reply, 400, "bad_request", "Missing Strava authorization state.");
+    }
+    const useCases = createUseCasesForUser(config.CURRENT_USER_ID);
+    try {
+      const result = await useCases.completeStravaAuthorization({
+        state: request.query.state,
+        ...(request.query.code ? { code: request.query.code } : {}),
+        ...(request.query.scope ? { scope: request.query.scope } : {}),
+        ...(request.query.error ? { error: request.query.error } : {})
+      });
+      return reply.redirect(result.redirectUrl);
+    } catch (error) {
+      return handleApplicationError(error, reply);
+    }
   });
 
   app.delete("/v1/integrations/strava", async (request, reply) => {

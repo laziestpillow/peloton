@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
-import type { ApplicationRepository } from "../../application/useCases.js";
+import type { ApplicationRepository, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
   Group,
@@ -11,7 +11,7 @@ import type {
   RouteSummary
 } from "../../domain/models.js";
 import type { Database } from "../database/client.js";
-import { groupMemberships, groups, importedActivities, riderProfiles } from "../database/schema.js";
+import { groupMemberships, groups, importedActivities, riderProfiles, stravaConnections, stravaOAuthStates } from "../database/schema.js";
 
 function toIsoString(value: Date): string {
   return value.toISOString();
@@ -99,6 +99,17 @@ function toMembershipStatus(value: string): GroupMembership["status"] {
     default:
       return "removed";
   }
+}
+
+function toStravaOAuthState(row: typeof stravaOAuthStates.$inferSelect): StravaOAuthState {
+  return {
+    state: row.state,
+    userId: row.userId,
+    redirectUrl: row.redirectUrl,
+    expiresAt: row.expiresAt,
+    consumedAt: row.consumedAt,
+    createdAt: row.createdAt
+  };
 }
 
 export class PostgresRepository implements ApplicationRepository {
@@ -201,5 +212,57 @@ export class PostgresRepository implements ApplicationRepository {
       throw new Error("Group membership insert did not return a row.");
     }
     return toGroupMembership(row);
+  }
+
+  async createStravaOAuthState(input: StravaOAuthState): Promise<void> {
+    await this.db.insert(stravaOAuthStates).values({
+      state: input.state,
+      userId: input.userId,
+      redirectUrl: input.redirectUrl,
+      expiresAt: input.expiresAt,
+      consumedAt: input.consumedAt,
+      createdAt: input.createdAt
+    });
+  }
+
+  async getStravaOAuthState(state: string): Promise<StravaOAuthState | null> {
+    const [row] = await this.db.select().from(stravaOAuthStates).where(eq(stravaOAuthStates.state, state)).limit(1);
+    return row ? toStravaOAuthState(row) : null;
+  }
+
+  async consumeStravaOAuthState(input: { state: string; consumedAt: Date }): Promise<void> {
+    await this.db
+      .update(stravaOAuthStates)
+      .set({ consumedAt: input.consumedAt })
+      .where(eq(stravaOAuthStates.state, input.state));
+  }
+
+  async upsertStravaConnection(input: StravaConnectionInput): Promise<void> {
+    const now = new Date();
+    await this.db
+      .insert(stravaConnections)
+      .values({
+        userId: input.userId,
+        athleteId: input.athleteId,
+        acceptedScopes: input.acceptedScopes,
+        encryptedAccessToken: input.encryptedAccessToken,
+        encryptedRefreshToken: input.encryptedRefreshToken,
+        accessTokenExpiresAt: input.accessTokenExpiresAt,
+        status: input.status,
+        createdAt: now,
+        updatedAt: now
+      })
+      .onConflictDoUpdate({
+        target: stravaConnections.userId,
+        set: {
+          athleteId: input.athleteId,
+          acceptedScopes: input.acceptedScopes,
+          encryptedAccessToken: input.encryptedAccessToken,
+          encryptedRefreshToken: input.encryptedRefreshToken,
+          accessTokenExpiresAt: input.accessTokenExpiresAt,
+          status: input.status,
+          updatedAt: now
+        }
+      });
   }
 }
