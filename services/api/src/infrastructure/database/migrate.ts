@@ -1,11 +1,14 @@
 import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { loadConfig } from "../../config/env.js";
 
+const migrationFileNamePattern = /^\d{4}_[a-z0-9_]+\.sql$/u;
+const migrationsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../../migrations");
+
 export async function runMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
-  const migrationsDir = resolve(process.cwd(), "migrations");
 
   try {
     await pool.query(`
@@ -17,7 +20,9 @@ export async function runMigrations(databaseUrl: string): Promise<void> {
 
     const appliedResult = await pool.query<{ name: string }>("SELECT name FROM schema_migrations");
     const applied = new Set(appliedResult.rows.map((row) => row.name));
-    const migrationNames = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).toSorted();
+    const migrationNames = (await readdir(migrationsDir))
+      .filter((name) => migrationFileNamePattern.test(name))
+      .toSorted();
 
     for (const migrationName of migrationNames) {
       if (applied.has(migrationName)) {
