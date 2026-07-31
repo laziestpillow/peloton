@@ -13,10 +13,10 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "seed": "node --experimental-strip-types src/seed.ts",
+    "seed": "tsx src/seed.ts",
     "contract:check": "node --experimental-strip-types scripts/contract-check.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node --experimental-strip-types src/infrastructure/database/migrate.ts"
+    "db:migrate": "tsx src/infrastructure/database/migrate.ts"
   },
   "dependencies": {
     "@fastify/swagger": "9.8.1",

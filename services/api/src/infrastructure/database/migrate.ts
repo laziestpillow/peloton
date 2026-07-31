@@ -1,11 +1,86 @@
-import { readdir, readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { loadConfig } from "../../config/env.js";
 
-const migrationFileNamePattern = /^\d{4}_[a-z0-9_]+\.sql$/u;
-const migrationsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../../migrations");
+interface Migration {
+  name: string;
+  statements: readonly string[];
+}
+
+const migrations: readonly Migration[] = [
+  {
+    name: "0000_initial.sql",
+    statements: [
+      "CREATE TYPE appearance_pattern AS ENUM ('solid', 'stripes', 'polkaDots')",
+      "CREATE TYPE connection_status AS ENUM ('connected', 'expired', 'error', 'revoked')",
+      `
+        CREATE TABLE users (
+          id text PRIMARY KEY,
+          created_at timestamptz NOT NULL,
+          updated_at timestamptz NOT NULL
+        )
+      `,
+      `
+        CREATE TABLE rider_profiles (
+          id text PRIMARY KEY,
+          user_id text NOT NULL REFERENCES users(id),
+          display_name text NOT NULL,
+          jersey_color text NOT NULL,
+          accent_color text NOT NULL,
+          helmet_color text NOT NULL,
+          bike_color text NOT NULL,
+          pattern appearance_pattern NOT NULL,
+          created_at timestamptz NOT NULL,
+          updated_at timestamptz NOT NULL
+        )
+      `,
+      `
+        CREATE TABLE groups (
+          id text PRIMARY KEY,
+          name text NOT NULL,
+          owner_id text NOT NULL REFERENCES users(id),
+          created_at timestamptz NOT NULL,
+          updated_at timestamptz NOT NULL
+        )
+      `,
+      `
+        CREATE TABLE group_memberships (
+          group_id text NOT NULL REFERENCES groups(id),
+          rider_id text NOT NULL REFERENCES rider_profiles(id),
+          role text NOT NULL,
+          status text NOT NULL,
+          joined_at timestamptz NOT NULL,
+          PRIMARY KEY (group_id, rider_id)
+        )
+      `,
+      `
+        CREATE TABLE imported_activities (
+          id text PRIMARY KEY,
+          rider_id text NOT NULL REFERENCES rider_profiles(id),
+          provider text NOT NULL,
+          provider_activity_id text NOT NULL,
+          started_at timestamptz NOT NULL,
+          distance_meters numeric NOT NULL,
+          elapsed_time_seconds integer NOT NULL,
+          elevation_gain_meters numeric NOT NULL,
+          route_summary jsonb NOT NULL,
+          UNIQUE (provider, provider_activity_id)
+        )
+      `
+    ]
+  },
+  {
+    name: "0001_imported_activity_contract_fields.sql",
+    statements: [
+      `
+        ALTER TABLE imported_activities
+          ADD COLUMN activity_type text NOT NULL DEFAULT 'ride',
+          ADD COLUMN moving_time_seconds integer NOT NULL DEFAULT 0,
+          ADD COLUMN import_status text NOT NULL DEFAULT 'eligible',
+          ADD COLUMN processed_stage_id text
+      `
+    ]
+  }
+];
 
 export async function runMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -20,22 +95,20 @@ export async function runMigrations(databaseUrl: string): Promise<void> {
 
     const appliedResult = await pool.query<{ name: string }>("SELECT name FROM schema_migrations");
     const applied = new Set(appliedResult.rows.map((row) => row.name));
-    const migrationNames = (await readdir(migrationsDir))
-      .filter((name) => migrationFileNamePattern.test(name))
-      .toSorted();
 
-    for (const migrationName of migrationNames) {
-      if (applied.has(migrationName)) {
+    for (const migration of migrations) {
+      if (applied.has(migration.name)) {
         continue;
       }
 
-      const sql = await readFile(resolve(migrationsDir, migrationName), "utf8");
       await pool.query("BEGIN");
       try {
-        await pool.query(sql);
-        await pool.query("INSERT INTO schema_migrations (name) VALUES ($1)", [migrationName]);
+        for (const statement of migration.statements) {
+          await pool.query(statement);
+        }
+        await pool.query("INSERT INTO schema_migrations (name) VALUES ($1)", [migration.name]);
         await pool.query("COMMIT");
-        console.log(`Applied migration ${migrationName}.`);
+        console.log(`Applied migration ${migration.name}.`);
       } catch (error) {
         await pool.query("ROLLBACK");
         throw error;
