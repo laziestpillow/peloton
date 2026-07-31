@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { buildServer } from "../../src/http/server.js";
 import type { AppConfig } from "../../src/config/env.js";
+import { loadApiFixtureData } from "../../src/application/fixtureData.js";
 import { FixtureRepository } from "../../src/infrastructure/repositories/FixtureRepository.js";
 
 const config: AppConfig = {
@@ -17,7 +18,7 @@ const config: AppConfig = {
 
 describe("server repository-backed routes", () => {
   test("serves current rider and activities through injected repository", async () => {
-    const repository = new FixtureRepository();
+    const repository = new FixtureRepository(await loadApiFixtureData());
     const app = await buildServer(config, { repository });
 
     try {

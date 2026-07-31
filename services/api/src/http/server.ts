@@ -4,6 +4,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import YAML from "yaml";
+import { loadApiFixtureData, type ApiFixtureData } from "../application/fixtureData.js";
 import type { AppConfig } from "../config/env.js";
 import { createApplicationUseCases, type ApplicationRepository, type ApplicationUseCases } from "../application/useCases.js";
 import type { RiderAppearance } from "../domain/models.js";
@@ -15,9 +16,9 @@ export interface ServerOptions {
   repository?: ApplicationRepository;
 }
 
-function createRepository(config: AppConfig): { repository: ApplicationRepository; connection?: DatabaseConnection } {
+function createRepository(config: AppConfig, fixtureData: ApiFixtureData): { repository: ApplicationRepository; connection?: DatabaseConnection } {
   if (config.DATA_SOURCE === "fixture") {
-    return { repository: new FixtureRepository() };
+    return { repository: new FixtureRepository(fixtureData) };
   }
 
   const connection = createDatabaseConnection(config.DATABASE_URL);
@@ -34,8 +35,9 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
       redact: ["req.headers.authorization", "strava.accessToken", "strava.refreshToken"]
     }
   });
-  const liveRepository = options.repository ? { repository: options.repository } : createRepository(config);
-  const useCases: ApplicationUseCases = createApplicationUseCases(liveRepository.repository, config.CURRENT_USER_ID);
+  const fixtureData = await loadApiFixtureData();
+  const liveRepository = options.repository ? { repository: options.repository } : createRepository(config, fixtureData);
+  const useCases: ApplicationUseCases = createApplicationUseCases(liveRepository.repository, config.CURRENT_USER_ID, fixtureData);
 
   if (liveRepository.connection) {
     app.addHook("onClose", async () => {

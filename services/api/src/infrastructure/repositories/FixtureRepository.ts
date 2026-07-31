@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFixture } from "../../application/fixtureData.js";
+import type { ApiFixtureData } from "../../application/fixtureData.js";
 import type { ApplicationRepository } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
@@ -10,13 +10,11 @@ import type {
   RiderProfile
 } from "../../domain/models.js";
 
-interface RecapFixture {
-  riders: readonly RiderProfile[];
-}
-
 export class FixtureRepository implements ApplicationRepository {
+  constructor(private readonly fixtureData: ApiFixtureData) {}
+
   async listActivities(): Promise<ActivityListResponse> {
-    return readFixture<ActivityListResponse>("activities.json");
+    return this.fixtureData.activities;
   }
 
   async getActivity(activityId: string): Promise<ImportedActivity | null> {
@@ -25,8 +23,7 @@ export class FixtureRepository implements ApplicationRepository {
   }
 
   async getCurrentRider(userId: string): Promise<RiderProfile | null> {
-    const recap = await readFixture<RecapFixture>("recap.json");
-    return recap.riders.find((rider) => rider.userId === userId) ?? null;
+    return this.fixtureData.recap.riders.find((rider) => rider.userId === userId) ?? null;
   }
 
   async updateCurrentRiderAppearance(userId: string, appearance: RiderAppearance): Promise<RiderProfile | null> {

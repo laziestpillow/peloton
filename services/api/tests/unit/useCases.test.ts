@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createApplicationUseCases, type ApplicationRepository } from "../../src/application/useCases.js";
+import type { ApiFixtureData } from "../../src/application/fixtureData.js";
 import type {
   ActivityListResponse,
   Group,
@@ -44,6 +45,13 @@ const activity: ImportedActivity = {
   },
   importStatus: "processed",
   processedStageId: "stage-001"
+};
+
+const fixtureData: ApiFixtureData = {
+  activities: { data: [activity], pagination: { nextCursor: null } },
+  recap: { riders: [rider] },
+  stageResults: {},
+  seasonStandings: {}
 };
 
 class InMemoryRepository implements ApplicationRepository {
@@ -102,7 +110,7 @@ class InMemoryRepository implements ApplicationRepository {
 
 describe("application use cases", () => {
   test("reads activities through the repository", async () => {
-    const useCases = createApplicationUseCases(new InMemoryRepository(), "user-001");
+    const useCases = createApplicationUseCases(new InMemoryRepository(), "user-001", fixtureData);
 
     await expect(useCases.listActivities()).resolves.toEqual({ data: [activity], pagination: { nextCursor: null } });
     await expect(useCases.getActivity("activity-001")).resolves.toEqual(activity);
@@ -110,7 +118,7 @@ describe("application use cases", () => {
   });
 
   test("updates rider appearance through the repository", async () => {
-    const useCases = createApplicationUseCases(new InMemoryRepository(), "user-001");
+    const useCases = createApplicationUseCases(new InMemoryRepository(), "user-001", fixtureData);
     const appearance: RiderAppearance = {
       jerseyColor: "#000000",
       accentColor: "#FFFFFF",

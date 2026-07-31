@@ -1,4 +1,4 @@
-import { readFixture } from "./fixtureData.js";
+import type { ApiFixtureData } from "./fixtureData.js";
 import type {
   ActivityListResponse,
   Group,
@@ -32,7 +32,11 @@ export interface ApplicationUseCases {
   getSeasonArchetypes(): Promise<unknown>;
 }
 
-export function createApplicationUseCases(repository: ApplicationRepository, currentUserId: string): ApplicationUseCases {
+export function createApplicationUseCases(
+  repository: ApplicationRepository,
+  currentUserId: string,
+  fixtureData: ApiFixtureData
+): ApplicationUseCases {
   return {
     listActivities: () => repository.listActivities(),
     getActivity: (activityId) => repository.getActivity(activityId),
@@ -53,9 +57,9 @@ export function createApplicationUseCases(repository: ApplicationRepository, cur
     createGroup: (input) => repository.createGroup({ name: input.name ?? "Fixture Club", ownerId: currentUserId }),
     getGroup: (groupId) => repository.getGroup(groupId),
     addGroupMember: (input) => repository.addGroupMember(input),
-    getStageRecap: () => readFixture("recap.json"),
-    getStageResults: () => readFixture("stage-results.json"),
-    getSeasonStandings: () => readFixture("season-standings.json"),
+    getStageRecap: async () => fixtureData.recap,
+    getStageResults: async () => fixtureData.stageResults,
+    getSeasonStandings: async () => fixtureData.seasonStandings,
     async getSeasonArchetypes() {
       return {
         data: [
