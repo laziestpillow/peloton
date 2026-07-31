@@ -75,3 +75,12 @@ export const stravaConnections = pgTable("strava_connections", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
 });
+
+export const activitySyncRequests = pgTable("activity_sync_requests", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  idempotencyKey: text("idempotency_key"),
+  status: text("status").notNull(),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true })
+}, (table) => [unique().on(table.userId, table.idempotencyKey)]);

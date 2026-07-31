@@ -89,6 +89,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActivitySyncResponse"
+        "400":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
         "429":

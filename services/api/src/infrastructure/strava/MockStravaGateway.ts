@@ -1,6 +1,8 @@
 import type { StravaActivitySummary, StravaGateway, StravaTokenExchange } from "./StravaGateway.js";
 
 export class MockStravaGateway implements StravaGateway {
+  constructor(private readonly activities?: readonly StravaActivitySummary[]) {}
+
   async exchangeAuthorizationCode(input: {
     clientId: string;
     clientSecret: string;
@@ -16,14 +18,17 @@ export class MockStravaGateway implements StravaGateway {
     };
   }
 
-  async listRecentActivities(riderId: string): Promise<readonly StravaActivitySummary[]> {
-    return [
+  async listRecentActivities(_input: { accessToken: string }): Promise<readonly StravaActivitySummary[]> {
+    return this.activities ?? [
       {
-        providerActivityId: `mock-${riderId}-001`,
+        providerActivityId: "mock-strava-001",
+        sportType: "Ride",
         startedAt: "2026-07-18T07:30:00Z",
         distanceMeters: 42195,
         elapsedTimeSeconds: 6120,
-        elevationGainMeters: 680
+        movingTimeSeconds: 5890,
+        elevationGainMeters: 680,
+        polyline: "mock_polyline"
       }
     ];
   }

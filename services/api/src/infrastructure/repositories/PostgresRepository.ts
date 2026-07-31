@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
-import type { ApplicationRepository, StravaConnection, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
+import type {
+  ActivitySyncStart,
+  ApplicationRepository,
+  ImportedActivityInput,
+  StravaConnection,
+  StravaConnectionInput,
+  StravaConnectionUpdate,
+  StravaOAuthState
+} from "../../application/useCases.js";
 import type {
   ActivityListResponse,
   Group,
@@ -11,7 +19,15 @@ import type {
   RouteSummary
 } from "../../domain/models.js";
 import type { Database } from "../database/client.js";
-import { groupMemberships, groups, importedActivities, riderProfiles, stravaConnections, stravaOAuthStates } from "../database/schema.js";
+import {
+  activitySyncRequests,
+  groupMemberships,
+  groups,
+  importedActivities,
+  riderProfiles,
+  stravaConnections,
+  stravaOAuthStates
+} from "../database/schema.js";
 
 function toIsoString(value: Date): string {
   return value.toISOString();
@@ -284,7 +300,7 @@ export class PostgresRepository implements ApplicationRepository {
     return row ? toStravaConnection(row) : null;
   }
 
-  async updateStravaConnection(input: StravaConnectionInput): Promise<void> {
+  async updateStravaConnection(input: StravaConnectionUpdate): Promise<void> {
     await this.db
       .update(stravaConnections)
       .set({
@@ -294,8 +310,92 @@ export class PostgresRepository implements ApplicationRepository {
         encryptedRefreshToken: input.encryptedRefreshToken,
         accessTokenExpiresAt: input.accessTokenExpiresAt,
         status: input.status,
+        ...(input.lastSyncedAt !== undefined ? { lastSyncedAt: input.lastSyncedAt } : {}),
         updatedAt: new Date()
       })
       .where(eq(stravaConnections.userId, input.userId));
+  }
+
+  async beginActivitySync(input: { userId: string; idempotencyKey: string | null; requestedAt: Date }): Promise<ActivitySyncStart> {
+    if (input.idempotencyKey) {
+      const [existing] = await this.db
+        .select()
+        .from(activitySyncRequests)
+        .where(and(eq(activitySyncRequests.userId, input.userId), eq(activitySyncRequests.idempotencyKey, input.idempotencyKey)))
+        .limit(1);
+      if (existing) {
+        return { syncId: existing.id, status: "alreadyRunning", requestedAt: existing.requestedAt };
+      }
+    }
+
+    const [running] = await this.db
+      .select()
+      .from(activitySyncRequests)
+      .where(and(eq(activitySyncRequests.userId, input.userId), eq(activitySyncRequests.status, "running")))
+      .limit(1);
+    if (running) {
+      return { syncId: running.id, status: "alreadyRunning", requestedAt: running.requestedAt };
+    }
+
+    const syncId = `sync-${randomUUID()}`;
+    await this.db.insert(activitySyncRequests).values({
+      id: syncId,
+      userId: input.userId,
+      idempotencyKey: input.idempotencyKey,
+      status: "running",
+      requestedAt: input.requestedAt,
+      completedAt: null
+    });
+    return { syncId, status: "accepted", requestedAt: input.requestedAt };
+  }
+
+  async completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void> {
+    await this.db
+      .update(activitySyncRequests)
+      .set({ status: input.status, completedAt: input.completedAt })
+      .where(and(eq(activitySyncRequests.id, input.syncId), eq(activitySyncRequests.userId, input.userId)));
+  }
+
+  async upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
+    const [existing] = await this.db
+      .select()
+      .from(importedActivities)
+      .where(and(eq(importedActivities.provider, input.provider), eq(importedActivities.providerActivityId, input.providerActivityId)))
+      .limit(1);
+
+    if (existing) {
+      const [row] = await this.db
+        .update(importedActivities)
+        .set({ importStatus: "duplicate" })
+        .where(eq(importedActivities.id, existing.id))
+        .returning();
+      if (!row) {
+        throw new Error("Imported activity duplicate update did not return a row.");
+      }
+      return { activity: toImportedActivity(row), duplicate: true };
+    }
+
+    const [row] = await this.db
+      .insert(importedActivities)
+      .values({
+        id: `activity-${randomUUID()}`,
+        riderId: input.riderId,
+        provider: input.provider,
+        providerActivityId: input.providerActivityId,
+        activityType: input.activityType,
+        startedAt: input.startedAt,
+        distanceMeters: input.distanceMeters,
+        elapsedTimeSeconds: input.elapsedTimeSeconds,
+        movingTimeSeconds: input.movingTimeSeconds,
+        elevationGainMeters: input.elevationGainMeters,
+        routeSummary: input.routeSummary,
+        importStatus: input.importStatus,
+        processedStageId: input.processedStageId
+      })
+      .returning();
+    if (!row) {
+      throw new Error("Imported activity insert did not return a row.");
+    }
+    return { activity: toImportedActivity(row), duplicate: false };
   }
 }

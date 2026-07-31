@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { ApiFixtureData } from "../../application/fixtureData.js";
-import type { ApplicationRepository, StravaConnection, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
+import type {
+  ActivitySyncStart,
+  ApplicationRepository,
+  ImportedActivityInput,
+  StravaConnection,
+  StravaConnectionInput,
+  StravaConnectionUpdate,
+  StravaOAuthState
+} from "../../application/useCases.js";
 import type {
   ActivityListResponse,
   Group,
@@ -13,13 +21,18 @@ import type {
 export class FixtureRepository implements ApplicationRepository {
   private readonly stravaOAuthStates = new Map<string, StravaOAuthState>();
   private readonly stravaConnections = new Map<string, StravaConnection>();
+  private readonly stravaActivities = new Map<string, ImportedActivity>();
+  private readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
 
   constructor(private readonly fixtureData: ApiFixtureData) {}
 
   async listActivities(userId: string): Promise<ActivityListResponse> {
     const riderIds = this.fixtureData.recap.riders.filter((rider) => rider.userId === userId).map((rider) => rider.id);
     return {
-      data: this.fixtureData.activities.data.filter((activity) => riderIds.includes(activity.riderId)),
+      data: [
+        ...this.fixtureData.activities.data.filter((activity) => riderIds.includes(activity.riderId)),
+        ...Array.from(this.stravaActivities.values()).filter((activity) => riderIds.includes(activity.riderId))
+      ],
       pagination: { nextCursor: null }
     };
   }
@@ -109,11 +122,71 @@ export class FixtureRepository implements ApplicationRepository {
     return this.stravaConnections.get(userId) ?? null;
   }
 
-  async updateStravaConnection(input: StravaConnectionInput): Promise<void> {
+  async updateStravaConnection(input: StravaConnectionUpdate): Promise<void> {
     const existing = this.stravaConnections.get(input.userId);
     this.stravaConnections.set(input.userId, {
       ...input,
-      lastSyncedAt: existing?.lastSyncedAt ?? null
+      lastSyncedAt: input.lastSyncedAt !== undefined ? input.lastSyncedAt : existing?.lastSyncedAt ?? null
     });
+  }
+
+  async beginActivitySync(input: { userId: string; idempotencyKey: string | null; requestedAt: Date }): Promise<ActivitySyncStart> {
+    const existing = Array.from(this.activitySyncRequests.values()).find((sync) =>
+      sync.userId === input.userId && input.idempotencyKey !== null && sync.idempotencyKey === input.idempotencyKey
+    );
+    if (existing) {
+      return { syncId: existing.syncId, status: "alreadyRunning", requestedAt: existing.requestedAt };
+    }
+
+    const running = Array.from(this.activitySyncRequests.values()).find((sync) => sync.userId === input.userId && sync.syncStatus === "running");
+    if (running) {
+      return { syncId: running.syncId, status: "alreadyRunning", requestedAt: running.requestedAt };
+    }
+
+    const sync: ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" } = {
+      syncId: `sync-${randomUUID()}`,
+      userId: input.userId,
+      idempotencyKey: input.idempotencyKey,
+      status: "accepted",
+      syncStatus: "running",
+      requestedAt: input.requestedAt
+    };
+    this.activitySyncRequests.set(sync.syncId, sync);
+    return { syncId: sync.syncId, status: sync.status, requestedAt: sync.requestedAt };
+  }
+
+  async completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void> {
+    const sync = this.activitySyncRequests.get(input.syncId);
+    if (sync && sync.userId === input.userId) {
+      this.activitySyncRequests.set(input.syncId, { ...sync, syncStatus: input.status });
+    }
+  }
+
+  async upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
+    const providerKey = `${input.provider}:${input.providerActivityId}`;
+    const existing = this.stravaActivities.get(providerKey);
+    if (existing) {
+      const duplicate = { ...existing, importStatus: "duplicate" as const };
+      this.stravaActivities.set(providerKey, duplicate);
+      return { activity: duplicate, duplicate: true };
+    }
+
+    const activity: ImportedActivity = {
+      id: `activity-${randomUUID()}`,
+      riderId: input.riderId,
+      provider: input.provider,
+      providerActivityId: input.providerActivityId,
+      activityType: input.activityType,
+      startedAt: input.startedAt.toISOString(),
+      distanceMeters: input.distanceMeters,
+      elapsedTimeSeconds: input.elapsedTimeSeconds,
+      movingTimeSeconds: input.movingTimeSeconds,
+      elevationGainMeters: input.elevationGainMeters,
+      routeSummary: input.routeSummary,
+      importStatus: input.importStatus,
+      processedStageId: input.processedStageId
+    };
+    this.stravaActivities.set(providerKey, activity);
+    return { activity, duplicate: false };
   }
 }

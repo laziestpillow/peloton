@@ -126,11 +126,14 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   });
 
   app.post("/v1/activities/sync", async (request, reply) => {
-    getUseCases(request);
-    return reply.status(202).send({
-      status: "accepted",
-      requestedAt: new Date().toISOString()
-    });
+    const useCases = getUseCases(request);
+    const idempotencyHeader = request.headers["idempotency-key"];
+    const idempotencyKey = Array.isArray(idempotencyHeader) ? idempotencyHeader[0] : idempotencyHeader;
+    try {
+      return reply.status(202).send(await useCases.syncActivities(idempotencyKey ? { idempotencyKey } : undefined));
+    } catch (error) {
+      return handleApplicationError(error, reply);
+    }
   });
 
   app.get("/v1/activities", async (request) => {

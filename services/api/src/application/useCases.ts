@@ -34,10 +34,35 @@ export interface StravaConnection extends StravaConnectionInput {
   lastSyncedAt: Date | null;
 }
 
+export interface StravaConnectionUpdate extends StravaConnectionInput {
+  lastSyncedAt?: Date | null;
+}
+
 export interface StravaIntegrationStatus {
   status: "notConnected" | "connected" | "expired" | "error" | "revoked";
   acceptedScopes: readonly string[];
   lastSyncedAt: string | null;
+}
+
+export interface ActivitySyncStart {
+  syncId: string;
+  status: "accepted" | "alreadyRunning";
+  requestedAt: Date;
+}
+
+export interface ImportedActivityInput {
+  riderId: string;
+  provider: "strava";
+  providerActivityId: string;
+  activityType: "ride";
+  startedAt: Date;
+  distanceMeters: number;
+  elapsedTimeSeconds: number;
+  movingTimeSeconds: number;
+  elevationGainMeters: number;
+  routeSummary: ImportedActivity["routeSummary"];
+  importStatus: ImportedActivity["importStatus"];
+  processedStageId: string | null;
 }
 
 export interface ApplicationServices {
@@ -66,7 +91,10 @@ export interface ApplicationRepository {
   consumeStravaOAuthState(input: { state: string; consumedAt: Date }): Promise<void>;
   upsertStravaConnection(input: StravaConnectionInput): Promise<void>;
   getStravaConnection(userId: string): Promise<StravaConnection | null>;
-  updateStravaConnection(input: StravaConnectionInput): Promise<void>;
+  updateStravaConnection(input: StravaConnectionUpdate): Promise<void>;
+  beginActivitySync(input: { userId: string; idempotencyKey: string | null; requestedAt: Date }): Promise<ActivitySyncStart>;
+  completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void>;
+  upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
 }
 
 export interface ApplicationUseCases {
@@ -82,6 +110,7 @@ export interface ApplicationUseCases {
   getStravaStatus(): Promise<StravaIntegrationStatus>;
   refreshStravaConnection(): Promise<StravaConnection | null>;
   disconnectStrava(): Promise<void>;
+  syncActivities(input?: { idempotencyKey?: string }): Promise<{ status: "accepted" | "alreadyRunning"; requestedAt: string }>;
   getStageRecap(): Promise<unknown>;
   getStageResults(): Promise<unknown>;
   getSeasonStandings(): Promise<unknown>;
@@ -165,6 +194,52 @@ export function createApplicationUseCases(
       throw new ApplicationError(403, "forbidden", "You do not have access to this group.");
     }
     return group;
+  }
+
+  function isSupportedRide(sportType: string | undefined): boolean {
+    return sportType === undefined || ["Ride", "VirtualRide", "EBikeRide"].includes(sportType);
+  }
+
+  function emptyRouteSummary(polyline?: string): ImportedActivity["routeSummary"] {
+    return {
+      polyline: polyline ?? "",
+      previewBounds: {
+        southWest: { latitude: 0, longitude: 0 },
+        northEast: { latitude: 0, longitude: 0 }
+      }
+    };
+  }
+
+  async function refreshStravaConnection(): Promise<StravaConnection | null> {
+    const strava = requireStravaServices();
+    const connection = await repository.getStravaConnection(currentUserId);
+    if (!connection || connection.status === "revoked") {
+      return null;
+    }
+    if (connection.accessTokenExpiresAt.getTime() - now().getTime() > refreshThresholdMs) {
+      return connection;
+    }
+
+    try {
+      const refresh = await strava.stravaGateway.refreshAccessToken({
+        clientId: strava.stravaClientId,
+        clientSecret: strava.stravaClientSecret,
+        refreshToken: strava.tokenCipher.decrypt(connection.encryptedRefreshToken)
+      });
+      const refreshedConnection: StravaConnection = {
+        ...connection,
+        encryptedAccessToken: strava.tokenCipher.encrypt(refresh.accessToken),
+        encryptedRefreshToken: strava.tokenCipher.encrypt(refresh.refreshToken),
+        accessTokenExpiresAt: refresh.expiresAt,
+        status: "connected"
+      };
+      await repository.updateStravaConnection(refreshedConnection);
+      return refreshedConnection;
+    } catch {
+      const erroredConnection: StravaConnection = { ...connection, status: "error" };
+      await repository.updateStravaConnection(erroredConnection);
+      return erroredConnection;
+    }
   }
 
   return {
@@ -265,37 +340,7 @@ export function createApplicationUseCases(
     async getStravaStatus() {
       return toIntegrationStatus(await repository.getStravaConnection(currentUserId));
     },
-    async refreshStravaConnection() {
-      const strava = requireStravaServices();
-      const connection = await repository.getStravaConnection(currentUserId);
-      if (!connection || connection.status === "revoked") {
-        return null;
-      }
-      if (connection.accessTokenExpiresAt.getTime() - now().getTime() > refreshThresholdMs) {
-        return connection;
-      }
-
-      try {
-        const refresh = await strava.stravaGateway.refreshAccessToken({
-          clientId: strava.stravaClientId,
-          clientSecret: strava.stravaClientSecret,
-          refreshToken: strava.tokenCipher.decrypt(connection.encryptedRefreshToken)
-        });
-        const refreshedConnection: StravaConnection = {
-          ...connection,
-          encryptedAccessToken: strava.tokenCipher.encrypt(refresh.accessToken),
-          encryptedRefreshToken: strava.tokenCipher.encrypt(refresh.refreshToken),
-          accessTokenExpiresAt: refresh.expiresAt,
-          status: "connected"
-        };
-        await repository.updateStravaConnection(refreshedConnection);
-        return refreshedConnection;
-      } catch {
-        const erroredConnection: StravaConnection = { ...connection, status: "error" };
-        await repository.updateStravaConnection(erroredConnection);
-        return erroredConnection;
-      }
-    },
+    refreshStravaConnection,
     async disconnectStrava() {
       const strava = requireStravaServices();
       const connection = await repository.getStravaConnection(currentUserId);
@@ -321,6 +366,60 @@ export function createApplicationUseCases(
         accessTokenExpiresAt: now(),
         status: "revoked"
       });
+    },
+    async syncActivities(input) {
+      const strava = requireStravaServices();
+      const rider = await getCurrentRiderOrThrow();
+      const requestedAt = now();
+      const sync = await repository.beginActivitySync({
+        userId: currentUserId,
+        idempotencyKey: input?.idempotencyKey ?? null,
+        requestedAt
+      });
+      if (sync.status === "alreadyRunning") {
+        return { status: sync.status, requestedAt: sync.requestedAt.toISOString() };
+      }
+
+      try {
+        const connection = await refreshStravaConnection();
+        if (!connection || connection.status !== "connected") {
+          throw new ApplicationError(400, "bad_request", "Strava is not connected.");
+        }
+
+        const activities = await strava.stravaGateway.listRecentActivities({
+          accessToken: strava.tokenCipher.decrypt(connection.encryptedAccessToken)
+        });
+        for (const activity of activities) {
+          const supported = isSupportedRide(activity.sportType);
+          await repository.upsertImportedActivity({
+            riderId: rider.id,
+            provider: "strava",
+            providerActivityId: activity.providerActivityId,
+            activityType: "ride",
+            startedAt: new Date(activity.startedAt),
+            distanceMeters: activity.distanceMeters,
+            elapsedTimeSeconds: activity.elapsedTimeSeconds,
+            movingTimeSeconds: activity.movingTimeSeconds,
+            elevationGainMeters: activity.elevationGainMeters,
+            routeSummary: emptyRouteSummary(activity.polyline),
+            importStatus: supported ? "eligible" : "unsupported",
+            processedStageId: null
+          });
+        }
+
+        const completedAt = now();
+        await repository.updateStravaConnection({ ...connection, lastSyncedAt: completedAt, status: "connected" });
+        await repository.completeActivitySync({ syncId: sync.syncId, userId: currentUserId, status: "completed", completedAt });
+      } catch (error) {
+        await repository.completeActivitySync({ syncId: sync.syncId, userId: currentUserId, status: "failed", completedAt: now() });
+        const connection = await repository.getStravaConnection(currentUserId);
+        if (connection && connection.status !== "revoked") {
+          await repository.updateStravaConnection({ ...connection, status: "error" });
+        }
+        throw error;
+      }
+
+      return { status: sync.status, requestedAt: sync.requestedAt.toISOString() };
     },
     getStageRecap: async () => fixtureData.recap,
     getStageResults: async () => fixtureData.stageResults,
