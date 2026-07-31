@@ -2,3 +2,5 @@ packages:
   - services/api
 allowBuilds:
   esbuild: true
+overrides:
+  yaml: 2.9.0
