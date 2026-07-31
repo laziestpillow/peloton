@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
-import type { ApplicationRepository, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
+import type { ApplicationRepository, StravaConnection, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
   Group,
@@ -109,6 +109,19 @@ function toStravaOAuthState(row: typeof stravaOAuthStates.$inferSelect): StravaO
     expiresAt: row.expiresAt,
     consumedAt: row.consumedAt,
     createdAt: row.createdAt
+  };
+}
+
+function toStravaConnection(row: typeof stravaConnections.$inferSelect): StravaConnection {
+  return {
+    userId: row.userId,
+    athleteId: row.athleteId,
+    acceptedScopes: Array.isArray(row.acceptedScopes) ? row.acceptedScopes.map(String) : [],
+    encryptedAccessToken: row.encryptedAccessToken,
+    encryptedRefreshToken: row.encryptedRefreshToken,
+    accessTokenExpiresAt: row.accessTokenExpiresAt,
+    status: row.status,
+    lastSyncedAt: row.lastSyncedAt
   };
 }
 
@@ -264,5 +277,25 @@ export class PostgresRepository implements ApplicationRepository {
           updatedAt: now
         }
       });
+  }
+
+  async getStravaConnection(userId: string): Promise<StravaConnection | null> {
+    const [row] = await this.db.select().from(stravaConnections).where(eq(stravaConnections.userId, userId)).limit(1);
+    return row ? toStravaConnection(row) : null;
+  }
+
+  async updateStravaConnection(input: StravaConnectionInput): Promise<void> {
+    await this.db
+      .update(stravaConnections)
+      .set({
+        athleteId: input.athleteId,
+        acceptedScopes: input.acceptedScopes,
+        encryptedAccessToken: input.encryptedAccessToken,
+        encryptedRefreshToken: input.encryptedRefreshToken,
+        accessTokenExpiresAt: input.accessTokenExpiresAt,
+        status: input.status,
+        updatedAt: new Date()
+      })
+      .where(eq(stravaConnections.userId, input.userId));
   }
 }

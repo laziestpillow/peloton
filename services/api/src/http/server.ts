@@ -115,17 +115,14 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   });
 
   app.delete("/v1/integrations/strava", async (request, reply) => {
-    getUseCases(request);
+    const useCases = getUseCases(request);
+    await useCases.disconnectStrava();
     return reply.status(204).send();
   });
 
   app.get("/v1/integrations/strava/status", async (request) => {
-    getUseCases(request);
-    return {
-      status: "notConnected",
-      acceptedScopes: [],
-      lastSyncedAt: null
-    };
+    const useCases = getUseCases(request);
+    return useCases.getStravaStatus();
   });
 
   app.post("/v1/activities/sync", async (request, reply) => {

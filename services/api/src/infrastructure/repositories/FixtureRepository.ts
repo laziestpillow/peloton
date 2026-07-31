@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ApiFixtureData } from "../../application/fixtureData.js";
-import type { ApplicationRepository, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
+import type { ApplicationRepository, StravaConnection, StravaConnectionInput, StravaOAuthState } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
   Group,
@@ -12,7 +12,7 @@ import type {
 
 export class FixtureRepository implements ApplicationRepository {
   private readonly stravaOAuthStates = new Map<string, StravaOAuthState>();
-  private readonly stravaConnections = new Map<string, StravaConnectionInput>();
+  private readonly stravaConnections = new Map<string, StravaConnection>();
 
   constructor(private readonly fixtureData: ApiFixtureData) {}
 
@@ -102,6 +102,18 @@ export class FixtureRepository implements ApplicationRepository {
   }
 
   async upsertStravaConnection(input: StravaConnectionInput): Promise<void> {
-    this.stravaConnections.set(input.userId, input);
+    this.stravaConnections.set(input.userId, { ...input, lastSyncedAt: null });
+  }
+
+  async getStravaConnection(userId: string): Promise<StravaConnection | null> {
+    return this.stravaConnections.get(userId) ?? null;
+  }
+
+  async updateStravaConnection(input: StravaConnectionInput): Promise<void> {
+    const existing = this.stravaConnections.get(input.userId);
+    this.stravaConnections.set(input.userId, {
+      ...input,
+      lastSyncedAt: existing?.lastSyncedAt ?? null
+    });
   }
 }
