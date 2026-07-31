@@ -1,67 +1,79 @@
 import { readFixture } from "./fixtureData.js";
+import type {
+  ActivityListResponse,
+  Group,
+  GroupMembership,
+  ImportedActivity,
+  RiderAppearance,
+  RiderProfile
+} from "../domain/models.js";
 
-export interface ActivityListResponse {
-  data: readonly unknown[];
-  pagination: { nextCursor: string | null };
+export interface ApplicationRepository {
+  listActivities(): Promise<ActivityListResponse>;
+  getActivity(activityId: string): Promise<ImportedActivity | null>;
+  getCurrentRider(userId: string): Promise<RiderProfile | null>;
+  updateCurrentRiderAppearance(userId: string, appearance: RiderAppearance): Promise<RiderProfile | null>;
+  createGroup(input: { name: string; ownerId: string }): Promise<Group>;
+  getGroup(groupId: string): Promise<Group | null>;
+  addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership>;
 }
 
-export type JsonObject = Record<string, unknown>;
-
-function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+export interface ApplicationUseCases {
+  listActivities(): Promise<ActivityListResponse>;
+  getActivity(activityId: string): Promise<ImportedActivity | null>;
+  getCurrentRider(): Promise<RiderProfile>;
+  updateCurrentRiderAppearance(appearance: RiderAppearance): Promise<RiderProfile>;
+  createGroup(input: { name?: string }): Promise<Group>;
+  getGroup(groupId: string): Promise<Group | null>;
+  addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership>;
+  getStageRecap(): Promise<unknown>;
+  getStageResults(): Promise<unknown>;
+  getSeasonStandings(): Promise<unknown>;
+  getSeasonArchetypes(): Promise<unknown>;
 }
 
-export async function listActivities(): Promise<ActivityListResponse> {
-  return readFixture<ActivityListResponse>("activities.json");
-}
-
-export async function getActivity(activityId: string): Promise<unknown | null> {
-  const activities = await listActivities();
-  return activities.data.find((activity) => {
-    if (typeof activity !== "object" || activity === null || !("id" in activity)) {
-      return false;
-    }
-    return activity.id === activityId;
-  }) ?? null;
-}
-
-export async function getCurrentRider(): Promise<JsonObject> {
-  const recap = await readFixture<{ riders: readonly unknown[] }>("recap.json");
-  const firstRider = recap.riders[0];
-  if (!isJsonObject(firstRider)) {
-    throw new Error("Fixture recap has no riders.");
-  }
-  return firstRider;
-}
-
-export async function getStageRecap(): Promise<unknown> {
-  return readFixture("recap.json");
-}
-
-export async function getStageResults(): Promise<unknown> {
-  return readFixture("stage-results.json");
-}
-
-export async function getSeasonStandings(): Promise<unknown> {
-  return readFixture("season-standings.json");
-}
-
-export async function getSeasonArchetypes(): Promise<unknown> {
+export function createApplicationUseCases(repository: ApplicationRepository, currentUserId: string): ApplicationUseCases {
   return {
-    data: [
-      {
-        seasonId: "season-001",
-        riderId: "rider-001",
-        archetype: "sprinter",
-        confidence: 0.76,
-        sampleSize: 5,
-        sprintRelativeScore: 0.82,
-        climbRelativeScore: 0.61,
-        shortEffortScore: 0.7,
-        sustainedEffortScore: 0.58,
-        effectiveAt: "2026-07-20T10:00:00Z",
-        reasons: ["Sprint score is the strongest relative signal."]
+    listActivities: () => repository.listActivities(),
+    getActivity: (activityId) => repository.getActivity(activityId),
+    async getCurrentRider() {
+      const rider = await repository.getCurrentRider(currentUserId);
+      if (!rider) {
+        throw new Error(`Current rider for user '${currentUserId}' was not found.`);
       }
-    ]
+      return rider;
+    },
+    async updateCurrentRiderAppearance(appearance) {
+      const rider = await repository.updateCurrentRiderAppearance(currentUserId, appearance);
+      if (!rider) {
+        throw new Error(`Current rider for user '${currentUserId}' was not found.`);
+      }
+      return rider;
+    },
+    createGroup: (input) => repository.createGroup({ name: input.name ?? "Fixture Club", ownerId: currentUserId }),
+    getGroup: (groupId) => repository.getGroup(groupId),
+    addGroupMember: (input) => repository.addGroupMember(input),
+    getStageRecap: () => readFixture("recap.json"),
+    getStageResults: () => readFixture("stage-results.json"),
+    getSeasonStandings: () => readFixture("season-standings.json"),
+    async getSeasonArchetypes() {
+      return {
+        data: [
+          {
+            seasonId: "season-001",
+            riderId: "rider-001",
+            archetype: "sprinter",
+            confidence: 0.76,
+            sampleSize: 5,
+            sprintRelativeScore: 0.82,
+            climbRelativeScore: 0.61,
+            shortEffortScore: 0.7,
+            sustainedEffortScore: 0.58,
+            effectiveAt: "2026-07-20T10:00:00Z",
+            reasons: ["Sprint score is the strongest relative signal."]
+          }
+        ]
+      };
+    }
   };
 }

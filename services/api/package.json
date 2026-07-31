@@ -16,7 +16,7 @@
     "seed": "node --experimental-strip-types src/seed.ts",
     "contract:check": "node --experimental-strip-types scripts/contract-check.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "node --experimental-strip-types src/infrastructure/database/migrate.ts"
   },
   "dependencies": {
     "@fastify/swagger": "9.8.1",

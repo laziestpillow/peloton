@@ -10,7 +10,7 @@ database:
 	docker compose -f infra/docker-compose.yml up -d postgres
 
 seed:
-	cd services/api && pnpm seed
+	cd services/api && pnpm db:migrate && pnpm seed
 
 lint:
 	./scripts/lint.sh
@@ -20,4 +20,3 @@ test:
 
 contract-check:
 	cd services/api && pnpm contract:check
-

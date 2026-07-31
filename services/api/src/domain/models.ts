@@ -9,6 +9,60 @@ export interface RiderAppearance {
   pattern: "solid" | "stripes" | "polkaDots";
 }
 
+export interface RiderProfile {
+  id: string;
+  userId: string;
+  displayName: string;
+  appearance: RiderAppearance;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RouteSummary {
+  polyline: string;
+  previewBounds: {
+    southWest: { latitude: number; longitude: number };
+    northEast: { latitude: number; longitude: number };
+  };
+}
+
+export interface ImportedActivity {
+  id: string;
+  riderId: string;
+  provider: "strava" | "fixture";
+  providerActivityId: string;
+  activityType: "ride";
+  startedAt: string;
+  distanceMeters: number;
+  elapsedTimeSeconds: number;
+  movingTimeSeconds: number;
+  elevationGainMeters: number;
+  routeSummary: RouteSummary;
+  importStatus: "eligible" | "processing" | "processed" | "duplicate" | "unsupported" | "failed";
+  processedStageId: string | null;
+}
+
+export interface ActivityListResponse {
+  data: readonly ImportedActivity[];
+  pagination: { nextCursor: string | null };
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupMembership {
+  groupId: string;
+  riderId: string;
+  role: "owner" | "member";
+  status: "active" | "invited" | "removed";
+  joinedAt: string;
+}
+
 export interface Marker {
   id: string;
   type: MarkerType;
@@ -54,4 +108,3 @@ export interface ArchetypeResult {
   confidence: number;
   reasons: readonly string[];
 }
-
