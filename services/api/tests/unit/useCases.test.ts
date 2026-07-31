@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createApplicationUseCases, type ApplicationRepository, type StravaConnectionInput, type StravaOAuthState } from "../../src/application/useCases.js";
+import { createApplicationUseCases, type ApplicationRepository, type StravaConnection, type StravaConnectionInput, type StravaOAuthState } from "../../src/application/useCases.js";
 import type { ApiFixtureData } from "../../src/application/fixtureData.js";
 import type {
   ActivityListResponse,
@@ -10,6 +10,7 @@ import type {
   RiderProfile
 } from "../../src/domain/models.js";
 import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
+import type { StravaGateway, StravaTokenExchange } from "../../src/infrastructure/strava/StravaGateway.js";
 import { createTokenCipher } from "../../src/infrastructure/strava/TokenCipher.js";
 
 const rider: RiderProfile = {
@@ -59,7 +60,7 @@ const fixtureData: ApiFixtureData = {
 class InMemoryRepository implements ApplicationRepository {
   private currentRider: RiderProfile | null = rider;
   readonly stravaStates = new Map<string, StravaOAuthState>();
-  readonly stravaConnections = new Map<string, StravaConnectionInput>();
+  readonly stravaConnections = new Map<string, StravaConnection>();
 
   async listActivities(userId: string): Promise<ActivityListResponse> {
     return {
@@ -143,8 +144,76 @@ class InMemoryRepository implements ApplicationRepository {
   }
 
   async upsertStravaConnection(input: StravaConnectionInput): Promise<void> {
-    this.stravaConnections.set(input.userId, input);
+    this.stravaConnections.set(input.userId, { ...input, lastSyncedAt: null });
   }
+
+  async getStravaConnection(userId: string): Promise<StravaConnection | null> {
+    return this.stravaConnections.get(userId) ?? null;
+  }
+
+  async updateStravaConnection(input: StravaConnectionInput): Promise<void> {
+    const existing = this.stravaConnections.get(input.userId);
+    this.stravaConnections.set(input.userId, { ...input, lastSyncedAt: existing?.lastSyncedAt ?? null });
+  }
+}
+
+class FailingRefreshGateway extends MockStravaGateway {
+  override async refreshAccessToken(): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }> {
+    throw new Error("refresh failed");
+  }
+}
+
+class RecordingGateway implements StravaGateway {
+  revokedToken: string | null = null;
+
+  async exchangeAuthorizationCode(): Promise<StravaTokenExchange> {
+    throw new Error("not used");
+  }
+
+  async listRecentActivities(): Promise<readonly []> {
+    return [];
+  }
+
+  async refreshAccessToken(): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }> {
+    return {
+      accessToken: "fresh-access",
+      refreshToken: "fresh-refresh",
+      expiresAt: new Date("2026-07-31T20:00:00.000Z")
+    };
+  }
+
+  async revokeToken(input: { token: string }): Promise<void> {
+    this.revokedToken = input.token;
+  }
+}
+
+const tokenCipher = createTokenCipher("0000000000000000000000000000000000000000000000000000000000000000");
+
+function createStravaServices(stravaGateway: StravaGateway = new MockStravaGateway()) {
+  return {
+    stravaGateway,
+    tokenCipher,
+    stravaClientId: "12345",
+    stravaClientSecret: "secret",
+    stravaCallbackUrl: "http://127.0.0.1:8080/v1/auth/strava/callback",
+    appDeepLinkUrl: "peloton://strava/callback",
+    stravaOAuthScope: "read,activity:read_all",
+    stravaOAuthStateTtlSeconds: 600,
+    now: () => new Date("2026-07-31T10:00:00.000Z")
+  };
+}
+
+function connectedStravaConnection(input: Partial<StravaConnectionInput> = {}): StravaConnectionInput {
+  return {
+    userId: "user-001",
+    athleteId: "100001",
+    acceptedScopes: ["read", "activity:read_all"],
+    encryptedAccessToken: tokenCipher.encrypt("old-access"),
+    encryptedRefreshToken: tokenCipher.encrypt("old-refresh"),
+    accessTokenExpiresAt: new Date("2026-07-31T20:00:00.000Z"),
+    status: "connected",
+    ...input
+  };
 }
 
 describe("application use cases", () => {
@@ -182,15 +251,7 @@ describe("application use cases", () => {
   test("creates and completes Strava OAuth connection through durable state", async () => {
     const repository = new InMemoryRepository();
     const useCases = createApplicationUseCases(repository, "user-001", fixtureData, {
-      stravaGateway: new MockStravaGateway(),
-      tokenCipher: createTokenCipher("0000000000000000000000000000000000000000000000000000000000000000"),
-      stravaClientId: "12345",
-      stravaClientSecret: "secret",
-      stravaCallbackUrl: "http://127.0.0.1:8080/v1/auth/strava/callback",
-      appDeepLinkUrl: "peloton://strava/callback",
-      stravaOAuthScope: "read,activity:read_all",
-      stravaOAuthStateTtlSeconds: 600,
-      now: () => new Date("2026-07-31T10:00:00.000Z")
+      ...createStravaServices()
     });
 
     const start = await useCases.startStravaAuthorization();
@@ -225,20 +286,72 @@ describe("application use cases", () => {
       createdAt: new Date("2026-07-31T09:50:00.000Z")
     });
     const useCases = createApplicationUseCases(repository, "user-001", fixtureData, {
-      stravaGateway: new MockStravaGateway(),
-      tokenCipher: createTokenCipher("0000000000000000000000000000000000000000000000000000000000000000"),
-      stravaClientId: "12345",
-      stravaClientSecret: "secret",
-      stravaCallbackUrl: "http://127.0.0.1:8080/v1/auth/strava/callback",
-      appDeepLinkUrl: "peloton://strava/callback",
-      stravaOAuthScope: "read,activity:read_all",
-      stravaOAuthStateTtlSeconds: 600,
-      now: () => new Date("2026-07-31T10:00:00.000Z")
+      ...createStravaServices()
     });
 
     await expect(useCases.completeStravaAuthorization({ code: "auth-code", state: "expired" })).rejects.toMatchObject({
       statusCode: 400,
       code: "bad_request"
     });
+  });
+
+  test("reports Strava connection statuses from durable state", async () => {
+    const repository = new InMemoryRepository();
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices());
+
+    await expect(useCases.getStravaStatus()).resolves.toEqual({
+      status: "notConnected",
+      acceptedScopes: [],
+      lastSyncedAt: null
+    });
+
+    await repository.upsertStravaConnection(connectedStravaConnection());
+    await expect(useCases.getStravaStatus()).resolves.toMatchObject({ status: "connected", acceptedScopes: ["read", "activity:read_all"] });
+
+    await repository.updateStravaConnection(connectedStravaConnection({ accessTokenExpiresAt: new Date("2026-07-31T09:59:00.000Z") }));
+    await expect(useCases.getStravaStatus()).resolves.toMatchObject({ status: "expired" });
+
+    await repository.updateStravaConnection(connectedStravaConnection({ status: "error" }));
+    await expect(useCases.getStravaStatus()).resolves.toMatchObject({ status: "error" });
+
+    await repository.updateStravaConnection(connectedStravaConnection({ status: "revoked" }));
+    await expect(useCases.getStravaStatus()).resolves.toMatchObject({ status: "revoked" });
+  });
+
+  test("refreshes expiring Strava tokens and persists rotated token values", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection({ accessTokenExpiresAt: new Date("2026-07-31T10:30:00.000Z") }));
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(new RecordingGateway()));
+
+    await useCases.refreshStravaConnection();
+
+    const connection = repository.stravaConnections.get("user-001");
+    expect(connection).toMatchObject({ status: "connected", accessTokenExpiresAt: new Date("2026-07-31T20:00:00.000Z") });
+    expect(tokenCipher.decrypt(connection?.encryptedAccessToken ?? "")).toBe("fresh-access");
+    expect(tokenCipher.decrypt(connection?.encryptedRefreshToken ?? "")).toBe("fresh-refresh");
+  });
+
+  test("marks Strava connection error when token refresh fails", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection({ accessTokenExpiresAt: new Date("2026-07-31T10:30:00.000Z") }));
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(new FailingRefreshGateway()));
+
+    await useCases.refreshStravaConnection();
+
+    expect(repository.stravaConnections.get("user-001")).toMatchObject({ status: "error" });
+  });
+
+  test("disconnects Strava by revoking refresh token and marking connection revoked", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection());
+    const gateway = new RecordingGateway();
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    await useCases.disconnectStrava();
+    await useCases.disconnectStrava();
+
+    expect(gateway.revokedToken).toBe("old-refresh");
+    expect(repository.stravaConnections.get("user-001")).toMatchObject({ status: "revoked" });
+    expect(tokenCipher.decrypt(repository.stravaConnections.get("user-001")?.encryptedRefreshToken ?? "")).toBe("revoked");
   });
 });

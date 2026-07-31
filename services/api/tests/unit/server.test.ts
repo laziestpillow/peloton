@@ -124,6 +124,21 @@ describe("server repository-backed routes", () => {
       expect(callback.headers.location).toBe("peloton://strava/callback?status=connected");
       expect(callback.body).not.toContain("mock-access");
       expect(callback.body).not.toContain("mock-refresh");
+
+      const connectedStatus = await app.inject({ method: "GET", url: "/v1/integrations/strava/status", headers: userOneAuth });
+      expect(connectedStatus.statusCode).toBe(200);
+      expect(connectedStatus.json()).toMatchObject({
+        status: "connected",
+        acceptedScopes: ["read", "activity:read_all"],
+        lastSyncedAt: null
+      });
+
+      const disconnect = await app.inject({ method: "DELETE", url: "/v1/integrations/strava", headers: userOneAuth });
+      expect(disconnect.statusCode).toBe(204);
+
+      const revokedStatus = await app.inject({ method: "GET", url: "/v1/integrations/strava/status", headers: userOneAuth });
+      expect(revokedStatus.statusCode).toBe(200);
+      expect(revokedStatus.json()).toMatchObject({ status: "revoked" });
     } finally {
       await app.close();
     }

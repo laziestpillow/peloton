@@ -30,6 +30,16 @@ export interface StravaConnectionInput {
   status: "connected" | "expired" | "error" | "revoked";
 }
 
+export interface StravaConnection extends StravaConnectionInput {
+  lastSyncedAt: Date | null;
+}
+
+export interface StravaIntegrationStatus {
+  status: "notConnected" | "connected" | "expired" | "error" | "revoked";
+  acceptedScopes: readonly string[];
+  lastSyncedAt: string | null;
+}
+
 export interface ApplicationServices {
   stravaGateway: StravaGateway;
   tokenCipher: TokenCipher;
@@ -55,6 +65,8 @@ export interface ApplicationRepository {
   getStravaOAuthState(state: string): Promise<StravaOAuthState | null>;
   consumeStravaOAuthState(input: { state: string; consumedAt: Date }): Promise<void>;
   upsertStravaConnection(input: StravaConnectionInput): Promise<void>;
+  getStravaConnection(userId: string): Promise<StravaConnection | null>;
+  updateStravaConnection(input: StravaConnectionInput): Promise<void>;
 }
 
 export interface ApplicationUseCases {
@@ -67,6 +79,9 @@ export interface ApplicationUseCases {
   addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership>;
   startStravaAuthorization(): Promise<{ authorizationUrl: string; stateExpiresAt: string }>;
   completeStravaAuthorization(input: { code?: string; state: string; scope?: string; error?: string }): Promise<{ redirectUrl: string }>;
+  getStravaStatus(): Promise<StravaIntegrationStatus>;
+  refreshStravaConnection(): Promise<StravaConnection | null>;
+  disconnectStrava(): Promise<void>;
   getStageRecap(): Promise<unknown>;
   getStageResults(): Promise<unknown>;
   getSeasonStandings(): Promise<unknown>;
@@ -90,6 +105,7 @@ export function createApplicationUseCases(
   services?: ApplicationServices
 ): ApplicationUseCases {
   const now = () => services?.now?.() ?? new Date();
+  const refreshThresholdMs = 60 * 60 * 1000;
 
   function appendDeepLinkResult(status: "connected" | "error", reason?: string): string {
     const url = new URL(services?.appDeepLinkUrl ?? "peloton://strava/callback");
@@ -108,6 +124,24 @@ export function createApplicationUseCases(
       throw new ApplicationError(400, "bad_request", "Strava client credentials are not configured.");
     }
     return services;
+  }
+
+  function toIntegrationStatus(connection: StravaConnection | null): StravaIntegrationStatus {
+    if (!connection) {
+      return { status: "notConnected", acceptedScopes: [], lastSyncedAt: null };
+    }
+    if (connection.status === "connected" && connection.accessTokenExpiresAt.getTime() <= now().getTime()) {
+      return {
+        status: "expired",
+        acceptedScopes: connection.acceptedScopes,
+        lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null
+      };
+    }
+    return {
+      status: connection.status,
+      acceptedScopes: connection.acceptedScopes,
+      lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null
+    };
   }
 
   async function getCurrentRiderOrThrow(): Promise<RiderProfile> {
@@ -227,6 +261,66 @@ export function createApplicationUseCases(
       });
 
       return { redirectUrl: appendDeepLinkResult("connected") };
+    },
+    async getStravaStatus() {
+      return toIntegrationStatus(await repository.getStravaConnection(currentUserId));
+    },
+    async refreshStravaConnection() {
+      const strava = requireStravaServices();
+      const connection = await repository.getStravaConnection(currentUserId);
+      if (!connection || connection.status === "revoked") {
+        return null;
+      }
+      if (connection.accessTokenExpiresAt.getTime() - now().getTime() > refreshThresholdMs) {
+        return connection;
+      }
+
+      try {
+        const refresh = await strava.stravaGateway.refreshAccessToken({
+          clientId: strava.stravaClientId,
+          clientSecret: strava.stravaClientSecret,
+          refreshToken: strava.tokenCipher.decrypt(connection.encryptedRefreshToken)
+        });
+        const refreshedConnection: StravaConnection = {
+          ...connection,
+          encryptedAccessToken: strava.tokenCipher.encrypt(refresh.accessToken),
+          encryptedRefreshToken: strava.tokenCipher.encrypt(refresh.refreshToken),
+          accessTokenExpiresAt: refresh.expiresAt,
+          status: "connected"
+        };
+        await repository.updateStravaConnection(refreshedConnection);
+        return refreshedConnection;
+      } catch {
+        const erroredConnection: StravaConnection = { ...connection, status: "error" };
+        await repository.updateStravaConnection(erroredConnection);
+        return erroredConnection;
+      }
+    },
+    async disconnectStrava() {
+      const strava = requireStravaServices();
+      const connection = await repository.getStravaConnection(currentUserId);
+      if (!connection || connection.status === "revoked") {
+        return;
+      }
+
+      const refreshToken = strava.tokenCipher.decrypt(connection.encryptedRefreshToken);
+      try {
+        await strava.stravaGateway.revokeToken({
+          clientId: strava.stravaClientId,
+          clientSecret: strava.stravaClientSecret,
+          token: refreshToken,
+          tokenTypeHint: "refresh_token"
+        });
+      } catch {
+        // Local state still becomes revoked so the user can disconnect safely.
+      }
+      await repository.updateStravaConnection({
+        ...connection,
+        encryptedAccessToken: strava.tokenCipher.encrypt("revoked"),
+        encryptedRefreshToken: strava.tokenCipher.encrypt("revoked"),
+        accessTokenExpiresAt: now(),
+        status: "revoked"
+      });
     },
     getStageRecap: async () => fixtureData.recap,
     getStageResults: async () => fixtureData.stageResults,

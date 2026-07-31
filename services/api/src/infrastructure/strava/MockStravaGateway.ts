@@ -28,7 +28,24 @@ export class MockStravaGateway implements StravaGateway {
     ];
   }
 
-  async refreshAccessToken(_userId: string): Promise<{ expiresAt: Date }> {
-    return { expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000) };
+  async refreshAccessToken(input: {
+    clientId: string;
+    clientSecret: string;
+    refreshToken: string;
+  }): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }> {
+    return {
+      accessToken: `mock-access-refreshed-${input.refreshToken}`,
+      refreshToken: `mock-refresh-rotated-${input.refreshToken}`,
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000)
+    };
+  }
+
+  async revokeToken(_input: {
+    clientId: string;
+    clientSecret: string;
+    token: string;
+    tokenTypeHint: "access_token" | "refresh_token";
+  }): Promise<void> {
+    return;
   }
 }
