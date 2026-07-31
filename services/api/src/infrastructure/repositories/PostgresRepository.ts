@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { ApplicationRepository } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
@@ -104,17 +104,27 @@ function toMembershipStatus(value: string): GroupMembership["status"] {
 export class PostgresRepository implements ApplicationRepository {
   constructor(private readonly db: Database) {}
 
-  async listActivities(): Promise<ActivityListResponse> {
-    const rows = await this.db.select().from(importedActivities).orderBy(asc(importedActivities.startedAt));
+  async listActivities(userId: string): Promise<ActivityListResponse> {
+    const rows = await this.db
+      .select({ activity: importedActivities })
+      .from(importedActivities)
+      .innerJoin(riderProfiles, eq(importedActivities.riderId, riderProfiles.id))
+      .where(eq(riderProfiles.userId, userId))
+      .orderBy(asc(importedActivities.startedAt));
     return {
-      data: rows.map(toImportedActivity),
+      data: rows.map((row) => toImportedActivity(row.activity)),
       pagination: { nextCursor: null }
     };
   }
 
-  async getActivity(activityId: string): Promise<ImportedActivity | null> {
-    const [row] = await this.db.select().from(importedActivities).where(eq(importedActivities.id, activityId)).limit(1);
-    return row ? toImportedActivity(row) : null;
+  async getActivity(input: { activityId: string; userId: string }): Promise<ImportedActivity | null> {
+    const [row] = await this.db
+      .select({ activity: importedActivities })
+      .from(importedActivities)
+      .innerJoin(riderProfiles, eq(importedActivities.riderId, riderProfiles.id))
+      .where(and(eq(importedActivities.id, input.activityId), eq(riderProfiles.userId, input.userId)))
+      .limit(1);
+    return row ? toImportedActivity(row.activity) : null;
   }
 
   async getCurrentRider(userId: string): Promise<RiderProfile | null> {
@@ -160,6 +170,16 @@ export class PostgresRepository implements ApplicationRepository {
   async getGroup(groupId: string): Promise<Group | null> {
     const [row] = await this.db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
     return row ? toGroup(row) : null;
+  }
+
+  async getGroupMembershipForUser(input: { groupId: string; userId: string }): Promise<GroupMembership | null> {
+    const [row] = await this.db
+      .select({ membership: groupMemberships })
+      .from(groupMemberships)
+      .innerJoin(riderProfiles, eq(groupMemberships.riderId, riderProfiles.id))
+      .where(and(eq(groupMemberships.groupId, input.groupId), eq(riderProfiles.userId, input.userId)))
+      .limit(1);
+    return row ? toGroupMembership(row.membership) : null;
   }
 
   async addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership> {

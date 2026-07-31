@@ -57,12 +57,15 @@ const fixtureData: ApiFixtureData = {
 class InMemoryRepository implements ApplicationRepository {
   private currentRider: RiderProfile | null = rider;
 
-  async listActivities(): Promise<ActivityListResponse> {
-    return { data: [activity], pagination: { nextCursor: null } };
+  async listActivities(userId: string): Promise<ActivityListResponse> {
+    return {
+      data: userId === rider.userId ? [activity] : [],
+      pagination: { nextCursor: null }
+    };
   }
 
-  async getActivity(activityId: string): Promise<ImportedActivity | null> {
-    return activity.id === activityId ? activity : null;
+  async getActivity(input: { activityId: string; userId: string }): Promise<ImportedActivity | null> {
+    return input.userId === rider.userId && activity.id === input.activityId ? activity : null;
   }
 
   async getCurrentRider(userId: string): Promise<RiderProfile | null> {
@@ -97,6 +100,19 @@ class InMemoryRepository implements ApplicationRepository {
       : null;
   }
 
+  async getGroupMembershipForUser(input: { groupId: string; userId: string }): Promise<GroupMembership | null> {
+    if (input.groupId !== "group-001" || input.userId !== "user-002") {
+      return null;
+    }
+    return {
+      groupId: input.groupId,
+      riderId: "rider-002",
+      role: "member",
+      status: "active",
+      joinedAt: "2026-07-01T10:00:00.000Z"
+    };
+  }
+
   async addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership> {
     return {
       groupId: input.groupId,
@@ -128,5 +144,15 @@ describe("application use cases", () => {
     };
 
     await expect(useCases.updateCurrentRiderAppearance(appearance)).resolves.toMatchObject({ appearance });
+  });
+
+  test("denies group member mutations for non-owners", async () => {
+    const useCases = createApplicationUseCases(new InMemoryRepository(), "user-002", fixtureData);
+
+    await expect(useCases.getGroup("group-001")).resolves.toMatchObject({ id: "group-001" });
+    await expect(useCases.addGroupMember({ groupId: "group-001", riderId: "rider-001" })).rejects.toMatchObject({
+      statusCode: 403,
+      code: "forbidden"
+    });
   });
 });
