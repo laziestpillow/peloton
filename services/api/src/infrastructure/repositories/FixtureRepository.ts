@@ -13,13 +13,17 @@ import type {
 export class FixtureRepository implements ApplicationRepository {
   constructor(private readonly fixtureData: ApiFixtureData) {}
 
-  async listActivities(): Promise<ActivityListResponse> {
-    return this.fixtureData.activities;
+  async listActivities(userId: string): Promise<ActivityListResponse> {
+    const riderIds = this.fixtureData.recap.riders.filter((rider) => rider.userId === userId).map((rider) => rider.id);
+    return {
+      data: this.fixtureData.activities.data.filter((activity) => riderIds.includes(activity.riderId)),
+      pagination: { nextCursor: null }
+    };
   }
 
-  async getActivity(activityId: string): Promise<ImportedActivity | null> {
-    const activities = await this.listActivities();
-    return activities.data.find((activity) => activity.id === activityId) ?? null;
+  async getActivity(input: { activityId: string; userId: string }): Promise<ImportedActivity | null> {
+    const activities = await this.listActivities(input.userId);
+    return activities.data.find((activity) => activity.id === input.activityId) ?? null;
   }
 
   async getCurrentRider(userId: string): Promise<RiderProfile | null> {
@@ -52,6 +56,20 @@ export class FixtureRepository implements ApplicationRepository {
       ownerId: "user-001",
       createdAt: "2026-07-01T10:00:00Z",
       updatedAt: "2026-07-01T10:00:00Z"
+    };
+  }
+
+  async getGroupMembershipForUser(input: { groupId: string; userId: string }): Promise<GroupMembership | null> {
+    const rider = this.fixtureData.recap.riders.find((candidate) => candidate.userId === input.userId);
+    if (!rider || input.groupId !== "group-001") {
+      return null;
+    }
+    return {
+      groupId: input.groupId,
+      riderId: rider.id,
+      role: input.userId === "user-001" ? "owner" : "member",
+      status: "active",
+      joinedAt: "2026-07-01T10:00:00Z"
     };
   }
 

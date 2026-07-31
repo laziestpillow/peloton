@@ -3,6 +3,10 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["test", "development", "staging", "production"]).default("development"),
   DATA_SOURCE: z.enum(["fixture", "postgres"]).default("postgres"),
+  AUTH_MODE: z.enum(["fixture", "disabled"]).default("fixture"),
+  FIXTURE_AUTH_TOKENS: z.string().default("user-001:dev-token-user-001,user-002:dev-token-user-002,user-003:dev-token-user-003"),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
   CURRENT_USER_ID: z.string().default("user-001"),
   API_HOST: z.string().default("127.0.0.1"),
   API_PORT: z.coerce.number().int().positive().default(8080),
