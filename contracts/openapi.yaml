@@ -30,6 +30,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StravaAuthorizationStart"
+              examples:
+                start:
+                  $ref: "#/components/examples/StravaAuthorizationStartExample"
   /v1/auth/strava/callback:
     get:
       operationId: completeStravaAuthorization
@@ -61,6 +64,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StravaIntegrationStatus"
+              examples:
+                notConnected:
+                  $ref: "#/components/examples/StravaStatusNotConnectedExample"
+                connected:
+                  $ref: "#/components/examples/StravaStatusConnectedExample"
+                error:
+                  $ref: "#/components/examples/StravaStatusErrorExample"
   /v1/activities/sync:
     post:
       operationId: syncActivities
@@ -74,6 +84,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActivitySyncResponse"
+              examples:
+                accepted:
+                  $ref: "#/components/examples/ActivitySyncAcceptedExample"
+                alreadyRunning:
+                  $ref: "#/components/examples/ActivitySyncAlreadyRunningExample"
   /v1/activities:
     get:
       operationId: listActivities
@@ -88,6 +103,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActivityListResponse"
+              examples:
+                populated:
+                  $ref: "#/components/examples/ActivityListPopulatedExample"
+                empty:
+                  $ref: "#/components/examples/ActivityListEmptyExample"
   /v1/activities/{activityId}:
     get:
       operationId: getActivity
@@ -101,6 +121,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImportedActivity"
+              examples:
+                processed:
+                  $ref: "#/components/examples/ImportedActivityProcessedExample"
+                failed:
+                  $ref: "#/components/examples/ImportedActivityFailedExample"
         "404":
           $ref: "#/components/responses/Error"
   /v1/riders/me:
@@ -114,6 +139,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RiderProfile"
+              examples:
+                current:
+                  $ref: "#/components/examples/RiderProfileExample"
   /v1/riders/me/appearance:
     patch:
       operationId: updateCurrentRiderAppearance
@@ -133,6 +161,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RiderProfile"
+              examples:
+                updated:
+                  $ref: "#/components/examples/RiderProfileUpdatedAppearanceExample"
   /v1/groups:
     post:
       operationId: createGroup
@@ -156,6 +187,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Group"
+              examples:
+                created:
+                  $ref: "#/components/examples/GroupExample"
   /v1/groups/{groupId}:
     get:
       operationId: getGroup
@@ -169,6 +203,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Group"
+              examples:
+                detail:
+                  $ref: "#/components/examples/GroupExample"
   /v1/groups/{groupId}/members:
     post:
       operationId: addGroupMember
@@ -193,6 +230,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupMembership"
+              examples:
+                active:
+                  $ref: "#/components/examples/GroupMembershipExample"
   /v1/groups/{groupId}/stages:
     get:
       operationId: listGroupStages
@@ -212,6 +252,11 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Stage"
+              examples:
+                populated:
+                  $ref: "#/components/examples/StageListPopulatedExample"
+                empty:
+                  $ref: "#/components/examples/StageListEmptyExample"
   /v1/stages/{stageId}:
     get:
       operationId: getStage
@@ -225,6 +270,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Stage"
+              examples:
+                completed:
+                  $ref: "#/components/examples/StageDetailExample"
   /v1/stages/{stageId}/recap:
     get:
       operationId: getStageRecap
@@ -238,6 +286,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StageRecap"
+              examples:
+                populated:
+                  $ref: "#/components/examples/StageRecapPopulatedExample"
+                empty:
+                  $ref: "#/components/examples/StageRecapEmptyExample"
   /v1/stages/{stageId}/results:
     get:
       operationId: getStageResults
@@ -251,6 +304,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StageResultsResponse"
+              examples:
+                populated:
+                  $ref: "#/components/examples/StageResultsPopulatedExample"
+                empty:
+                  $ref: "#/components/examples/StageResultsEmptyExample"
   /v1/seasons/{seasonId}/standings:
     get:
       operationId: getSeasonStandings
@@ -264,6 +322,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SeasonStandingsResponse"
+              examples:
+                populated:
+                  $ref: "#/components/examples/SeasonStandingsPopulatedExample"
+                empty:
+                  $ref: "#/components/examples/SeasonStandingsEmptyExample"
   /v1/seasons/{seasonId}/archetypes:
     get:
       operationId: getSeasonArchetypes
@@ -283,6 +346,11 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/ArchetypeSnapshot"
+              examples:
+                populated:
+                  $ref: "#/components/examples/ArchetypesPopulatedExample"
+                empty:
+                  $ref: "#/components/examples/ArchetypesEmptyExample"
 components:
   securitySchemes:
     bearerAuth:
@@ -347,6 +415,9 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            notFound:
+              $ref: "#/components/examples/ErrorNotFoundExample"
   schemas:
     ErrorResponse:
       type: object
@@ -661,4 +732,380 @@ components:
         reasons:
           type: array
           items: { type: string }
-
+  examples:
+    ErrorNotFoundExample:
+      summary: Resource not found.
+      value:
+        error:
+          code: not_found
+          message: Activity not found.
+          requestId: req_fixture_404
+    StravaAuthorizationStartExample:
+      summary: OAuth authorization URL.
+      value:
+        authorizationUrl: https://www.strava.com/oauth/authorize?client_id=fixture&response_type=code&scope=read,activity:read_all&state=fixture-state
+        stateExpiresAt: "2026-07-31T12:15:00Z"
+    StravaStatusNotConnectedExample:
+      summary: Rider has not connected Strava.
+      value:
+        status: notConnected
+        acceptedScopes: []
+        lastSyncedAt: null
+    StravaStatusConnectedExample:
+      summary: Rider has connected Strava.
+      value:
+        status: connected
+        acceptedScopes: [read, activity:read_all]
+        lastSyncedAt: "2026-07-30T18:42:00Z"
+    StravaStatusErrorExample:
+      summary: Last Strava sync failed.
+      value:
+        status: error
+        acceptedScopes: [read]
+        lastSyncedAt: "2026-07-28T08:10:00Z"
+    ActivitySyncAcceptedExample:
+      summary: Sync job accepted.
+      value:
+        status: accepted
+        requestedAt: "2026-07-31T10:05:00Z"
+    ActivitySyncAlreadyRunningExample:
+      summary: Sync job is already running.
+      value:
+        status: alreadyRunning
+        requestedAt: "2026-07-31T10:02:40Z"
+    RiderProfileExample:
+      summary: Current rider profile.
+      value:
+        id: rider-001
+        userId: user-001
+        displayName: Marta
+        appearance:
+          jerseyColor: "#2F80ED"
+          accentColor: "#F2C94C"
+          helmetColor: "#FFFFFF"
+          bikeColor: "#111111"
+          pattern: stripes
+        createdAt: "2026-07-01T10:00:00Z"
+        updatedAt: "2026-07-20T10:00:00Z"
+    RiderProfileUpdatedAppearanceExample:
+      summary: Profile after appearance update.
+      value:
+        id: rider-001
+        userId: user-001
+        displayName: Marta
+        appearance:
+          jerseyColor: "#9B51E0"
+          accentColor: "#56CCF2"
+          helmetColor: "#F2F2F2"
+          bikeColor: "#111111"
+          pattern: polkaDots
+        createdAt: "2026-07-01T10:00:00Z"
+        updatedAt: "2026-07-31T10:06:00Z"
+    ActivityListPopulatedExample:
+      summary: Imported activity list with mixed statuses.
+      value:
+        data:
+          - id: activity-001
+            riderId: rider-001
+            provider: fixture
+            providerActivityId: fixture-ride-001
+            activityType: ride
+            startedAt: "2026-07-18T07:30:00Z"
+            distanceMeters: 42195
+            elapsedTimeSeconds: 6120
+            movingTimeSeconds: 5890
+            elevationGainMeters: 680
+            routeSummary:
+              polyline: fixture_polyline_barcelona_hills
+              previewBounds:
+                southWest: { latitude: 41.34, longitude: 2.08 }
+                northEast: { latitude: 41.46, longitude: 2.22 }
+            importStatus: processed
+            processedStageId: stage-001
+          - id: activity-003
+            riderId: rider-001
+            provider: fixture
+            providerActivityId: fixture-ride-003
+            activityType: ride
+            startedAt: "2026-07-29T06:55:00Z"
+            distanceMeters: 15800
+            elapsedTimeSeconds: 2450
+            movingTimeSeconds: 2312
+            elevationGainMeters: 45
+            routeSummary:
+              polyline: fixture_polyline_flat_recovery
+              previewBounds:
+                southWest: { latitude: 41.38, longitude: 2.14 }
+                northEast: { latitude: 41.41, longitude: 2.18 }
+            importStatus: failed
+            processedStageId: null
+        pagination:
+          nextCursor: null
+    ActivityListEmptyExample:
+      summary: No imported activities yet.
+      value:
+        data: []
+        pagination:
+          nextCursor: null
+    ImportedActivityProcessedExample:
+      summary: Processed ride linked to a stage.
+      value:
+        id: activity-001
+        riderId: rider-001
+        provider: fixture
+        providerActivityId: fixture-ride-001
+        activityType: ride
+        startedAt: "2026-07-18T07:30:00Z"
+        distanceMeters: 42195
+        elapsedTimeSeconds: 6120
+        movingTimeSeconds: 5890
+        elevationGainMeters: 680
+        routeSummary:
+          polyline: fixture_polyline_barcelona_hills
+          previewBounds:
+            southWest: { latitude: 41.34, longitude: 2.08 }
+            northEast: { latitude: 41.46, longitude: 2.22 }
+        importStatus: processed
+        processedStageId: stage-001
+    ImportedActivityFailedExample:
+      summary: Imported ride that failed processing.
+      value:
+        id: activity-003
+        riderId: rider-001
+        provider: fixture
+        providerActivityId: fixture-ride-003
+        activityType: ride
+        startedAt: "2026-07-29T06:55:00Z"
+        distanceMeters: 15800
+        elapsedTimeSeconds: 2450
+        movingTimeSeconds: 2312
+        elevationGainMeters: 45
+        routeSummary:
+          polyline: fixture_polyline_flat_recovery
+          previewBounds:
+            southWest: { latitude: 41.38, longitude: 2.14 }
+            northEast: { latitude: 41.41, longitude: 2.18 }
+        importStatus: failed
+        processedStageId: null
+    GroupExample:
+      summary: Fixture club.
+      value:
+        id: group-001
+        name: Fixture Club
+        ownerId: user-001
+        createdAt: "2026-07-01T10:00:00Z"
+        updatedAt: "2026-07-01T10:00:00Z"
+    GroupMembershipExample:
+      summary: Active member.
+      value:
+        groupId: group-001
+        riderId: rider-002
+        role: member
+        status: active
+        joinedAt: "2026-07-19T09:00:00Z"
+    StageListPopulatedExample:
+      summary: Stages for a group.
+      value:
+        data:
+          - id: stage-001
+            seasonId: season-001
+            name: Barcelona Hills
+            route:
+              distanceMeters: 42195
+              elevation:
+                - { positionMeters: 0, altitudeMeters: 35 }
+                - { positionMeters: 12000, altitudeMeters: 62 }
+                - { positionMeters: 31000, altitudeMeters: 184 }
+                - { positionMeters: 42195, altitudeMeters: 88 }
+            orderedMarkers:
+              - id: marker-sprint-001
+                type: sprint
+                positionMeters: 12000
+                latitude: 41.39
+                longitude: 2.16
+                geofenceRadiusMeters: 25
+                category: null
+                pointsSchedule: [20, 17, 15, 13, 11]
+              - id: marker-climb-001
+                type: climb
+                positionMeters: 31000
+                latitude: 41.42
+                longitude: 2.18
+                geofenceRadiusMeters: 25
+                category: 3
+                pointsSchedule: [10, 8, 6, 4, 2]
+            scheduledAt: "2026-07-18T07:30:00Z"
+            status: completed
+          - id: stage-002
+            seasonId: season-001
+            name: Coastline Sprint
+            route:
+              distanceMeters: 30500
+              elevation:
+                - { positionMeters: 0, altitudeMeters: 8 }
+                - { positionMeters: 20500, altitudeMeters: 22 }
+                - { positionMeters: 30500, altitudeMeters: 16 }
+            orderedMarkers:
+              - id: marker-sprint-002
+                type: sprint
+                positionMeters: 20500
+                latitude: 41.37
+                longitude: 2.17
+                geofenceRadiusMeters: 25
+                category: null
+                pointsSchedule: [20, 17, 15, 13, 11]
+            scheduledAt: "2026-08-01T07:30:00Z"
+            status: scheduled
+    StageListEmptyExample:
+      summary: Group has no stages yet.
+      value:
+        data: []
+    StageDetailExample:
+      summary: Completed stage with markers.
+      value:
+        id: stage-001
+        seasonId: season-001
+        name: Barcelona Hills
+        route:
+          distanceMeters: 42195
+          elevation:
+            - { positionMeters: 0, altitudeMeters: 35 }
+            - { positionMeters: 12000, altitudeMeters: 62 }
+            - { positionMeters: 31000, altitudeMeters: 184 }
+            - { positionMeters: 42195, altitudeMeters: 88 }
+        orderedMarkers:
+          - id: marker-sprint-001
+            type: sprint
+            positionMeters: 12000
+            latitude: 41.39
+            longitude: 2.16
+            geofenceRadiusMeters: 25
+            category: null
+            pointsSchedule: [20, 17, 15, 13, 11]
+          - id: marker-climb-001
+            type: climb
+            positionMeters: 31000
+            latitude: 41.42
+            longitude: 2.18
+            geofenceRadiusMeters: 25
+            category: 3
+            pointsSchedule: [10, 8, 6, 4, 2]
+        scheduledAt: "2026-07-18T07:30:00Z"
+        status: completed
+    StageRecapPopulatedExample:
+      summary: Recap timeline for playback.
+      value:
+        stageId: stage-001
+        durationSeconds: 3600
+        riders:
+          - id: rider-001
+            userId: user-001
+            displayName: Marta
+            appearance:
+              jerseyColor: "#2F80ED"
+              accentColor: "#F2C94C"
+              helmetColor: "#FFFFFF"
+              bikeColor: "#111111"
+              pattern: stripes
+            createdAt: "2026-07-01T10:00:00Z"
+            updatedAt: "2026-07-20T10:00:00Z"
+        markers:
+          - id: marker-sprint-001
+            type: sprint
+            positionMeters: 12000
+            latitude: 41.39
+            longitude: 2.16
+            geofenceRadiusMeters: 25
+            category: null
+            pointsSchedule: [20, 17, 15, 13, 11]
+        timeline:
+          - timeSeconds: 0
+            positions:
+              - { riderId: rider-001, positionMeters: 0, speedMetersPerSecond: 8.8, markerEventId: null }
+          - timeSeconds: 1500
+            positions:
+              - { riderId: rider-001, positionMeters: 12030, speedMetersPerSecond: 9.3, markerEventId: marker-sprint-001 }
+    StageRecapEmptyExample:
+      summary: Stage recap before riders have matched efforts.
+      value:
+        stageId: stage-002
+        durationSeconds: 0
+        riders: []
+        markers: []
+        timeline: []
+    StageResultsPopulatedExample:
+      summary: Results with marker crossings and jersey leaders.
+      value:
+        stageId: stage-001
+        markerResults:
+          - markerId: marker-sprint-001
+            type: sprint
+            crossings:
+              - { riderId: rider-001, crossedAtSeconds: 1498, rank: 1, points: 20 }
+              - { riderId: rider-002, crossedAtSeconds: 1506, rank: 2, points: 17 }
+        classifications:
+          - stageId: stage-001
+            riderId: rider-001
+            sprintPoints: 20
+            komPoints: 8
+            finishBonus: 5
+            todayTotal: 33
+            gcTimeSeconds: 5890
+        jerseyLeaders:
+          green: rider-001
+          polkaDot: rider-002
+          yellow: rider-001
+    StageResultsEmptyExample:
+      summary: Stage has no scored results yet.
+      value:
+        stageId: stage-002
+        markerResults: []
+        classifications: []
+        jerseyLeaders:
+          green: ""
+          polkaDot: ""
+          yellow: ""
+    SeasonStandingsPopulatedExample:
+      summary: Season standings.
+      value:
+        seasonId: season-001
+        standings:
+          - { seasonId: season-001, riderId: rider-001, seasonTotal: 84, rank: 1, previousRank: 2 }
+          - { seasonId: season-001, riderId: rider-002, seasonTotal: 79, rank: 2, previousRank: 1 }
+    SeasonStandingsEmptyExample:
+      summary: Season before scored stages.
+      value:
+        seasonId: season-002
+        standings: []
+    ArchetypesPopulatedExample:
+      summary: Backend-derived archetypes.
+      value:
+        data:
+          - seasonId: season-001
+            riderId: rider-001
+            archetype: sprinter
+            confidence: 0.76
+            sampleSize: 5
+            sprintRelativeScore: 0.82
+            climbRelativeScore: 0.61
+            shortEffortScore: 0.7
+            sustainedEffortScore: 0.58
+            effectiveAt: "2026-07-20T10:00:00Z"
+            reasons:
+              - Sprint score is the strongest relative signal.
+          - seasonId: season-001
+            riderId: rider-002
+            archetype: climber
+            confidence: 0.72
+            sampleSize: 5
+            sprintRelativeScore: 0.58
+            climbRelativeScore: 0.84
+            shortEffortScore: 0.61
+            sustainedEffortScore: 0.74
+            effectiveAt: "2026-07-20T10:00:00Z"
+            reasons:
+              - Climb score is the strongest relative signal.
+    ArchetypesEmptyExample:
+      summary: Not enough activity data for archetypes.
+      value:
+        data: []

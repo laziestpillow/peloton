@@ -38,6 +38,14 @@ export interface StageScore {
   gcTimeSeconds: number;
 }
 
+export interface SeasonStanding {
+  seasonId: string;
+  riderId: string;
+  seasonTotal: number;
+  rank: number;
+  previousRank: number | null;
+}
+
 export interface ArchetypeInput {
   riderId: string;
   sampleSize: number;
@@ -54,4 +62,3 @@ export interface ArchetypeResult {
   confidence: number;
   reasons: readonly string[];
 }
-

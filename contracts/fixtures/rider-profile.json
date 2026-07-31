@@ -1,0 +1,14 @@
+{
+  "id": "rider-001",
+  "userId": "user-001",
+  "displayName": "Marta",
+  "appearance": {
+    "jerseyColor": "#2F80ED",
+    "accentColor": "#F2C94C",
+    "helmetColor": "#FFFFFF",
+    "bikeColor": "#111111",
+    "pattern": "stripes"
+  },
+  "createdAt": "2026-07-01T10:00:00Z",
+  "updatedAt": "2026-07-20T10:00:00Z"
+}

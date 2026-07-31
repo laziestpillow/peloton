@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "not_found",
+    "message": "Activity not found.",
+    "requestId": "req_fixture_404"
+  }
+}

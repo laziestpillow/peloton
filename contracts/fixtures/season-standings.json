@@ -14,7 +14,20 @@
       "seasonTotal": 79,
       "rank": 2,
       "previousRank": 1
+    },
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-003",
+      "seasonTotal": 54,
+      "rank": 3,
+      "previousRank": 3
+    },
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-004",
+      "seasonTotal": 38,
+      "rank": 4,
+      "previousRank": null
     }
   ]
 }
-

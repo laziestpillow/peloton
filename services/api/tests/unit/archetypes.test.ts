@@ -41,5 +41,66 @@ describe("archetypes", () => {
 
     expect(result.reasons.join(" ")).toContain("drifted");
   });
-});
 
+  test("uses explicit candidate priority for equal-strength ties", () => {
+    const result = classifyArchetype({
+      riderId: "rider-a",
+      sampleSize: 8,
+      sprintRelativeScore: 0.63,
+      climbRelativeScore: 0.75,
+      shortEffortScore: 0.74,
+      sustainedEffortScore: 0.62
+    });
+
+    expect(result.archetype).toBe("climber");
+    expect(result.reasons.join(" ")).toContain("Tie broken toward climber");
+  });
+
+  test("can tune thresholds without changing caller data shape", () => {
+    const defaultResult = classifyArchetype({
+      riderId: "rider-a",
+      sampleSize: 5,
+      sprintRelativeScore: 0.67,
+      climbRelativeScore: 0.52,
+      shortEffortScore: 0.54,
+      sustainedEffortScore: 0.55
+    });
+    const configuredResult = classifyArchetype(
+      {
+        riderId: "rider-a",
+        sampleSize: 5,
+        sprintRelativeScore: 0.67,
+        climbRelativeScore: 0.52,
+        shortEffortScore: 0.54,
+        sustainedEffortScore: 0.55
+      },
+      { minimumSpecialistScore: 0.65 }
+    );
+
+    expect(defaultResult.archetype).toBe("allRounder");
+    expect(configuredResult.archetype).toBe("sprinter");
+  });
+
+  test("reduces confidence when the profile drifts", () => {
+    const stable = classifyArchetype({
+      riderId: "rider-a",
+      sampleSize: 8,
+      sprintRelativeScore: 0.82,
+      climbRelativeScore: 0.5,
+      shortEffortScore: 0.55,
+      sustainedEffortScore: 0.52,
+      previousArchetype: "sprinter"
+    });
+    const drifted = classifyArchetype({
+      riderId: "rider-a",
+      sampleSize: 8,
+      sprintRelativeScore: 0.82,
+      climbRelativeScore: 0.5,
+      shortEffortScore: 0.55,
+      sustainedEffortScore: 0.52,
+      previousArchetype: "climber"
+    });
+
+    expect(drifted.confidence).toBeLessThan(stable.confidence);
+  });
+});

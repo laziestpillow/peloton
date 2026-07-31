@@ -1,0 +1,56 @@
+{
+  "data": [
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-001",
+      "archetype": "sprinter",
+      "confidence": 0.76,
+      "sampleSize": 5,
+      "sprintRelativeScore": 0.82,
+      "climbRelativeScore": 0.61,
+      "shortEffortScore": 0.7,
+      "sustainedEffortScore": 0.58,
+      "effectiveAt": "2026-07-20T10:00:00Z",
+      "reasons": ["Sprint score is the strongest relative signal."]
+    },
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-002",
+      "archetype": "climber",
+      "confidence": 0.72,
+      "sampleSize": 5,
+      "sprintRelativeScore": 0.58,
+      "climbRelativeScore": 0.84,
+      "shortEffortScore": 0.61,
+      "sustainedEffortScore": 0.74,
+      "effectiveAt": "2026-07-20T10:00:00Z",
+      "reasons": ["Climb score is the strongest relative signal."]
+    },
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-003",
+      "archetype": "allRounder",
+      "confidence": 0.64,
+      "sampleSize": 4,
+      "sprintRelativeScore": 0.67,
+      "climbRelativeScore": 0.65,
+      "shortEffortScore": 0.66,
+      "sustainedEffortScore": 0.63,
+      "effectiveAt": "2026-07-20T10:00:00Z",
+      "reasons": ["Sprint and climb signals are balanced."]
+    },
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-004",
+      "archetype": "rookie",
+      "confidence": 0.35,
+      "sampleSize": 1,
+      "sprintRelativeScore": 0.5,
+      "climbRelativeScore": 0.48,
+      "shortEffortScore": 0.46,
+      "sustainedEffortScore": 0.44,
+      "effectiveAt": "2026-07-20T10:00:00Z",
+      "reasons": ["More completed stages are needed before assigning a stronger archetype."]
+    }
+  ]
+}

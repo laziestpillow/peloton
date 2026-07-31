@@ -4,7 +4,7 @@
       "id": "activity-001",
       "riderId": "rider-001",
       "provider": "fixture",
-      "providerActivityId": "fixture-ride-001",
+      "providerActivityId": "fixture-ride-barcelona-hills",
       "activityType": "ride",
       "startedAt": "2026-07-18T07:30:00Z",
       "distanceMeters": 42195,
@@ -12,7 +12,7 @@
       "movingTimeSeconds": 5890,
       "elevationGainMeters": 680,
       "routeSummary": {
-        "polyline": "fixture_polyline",
+        "polyline": "fixture_polyline_barcelona_hills",
         "previewBounds": {
           "southWest": { "latitude": 41.34, "longitude": 2.08 },
           "northEast": { "latitude": 41.46, "longitude": 2.22 }
@@ -25,7 +25,7 @@
       "id": "activity-002",
       "riderId": "rider-001",
       "provider": "fixture",
-      "providerActivityId": "fixture-ride-002",
+      "providerActivityId": "fixture-ride-coastline-sprint",
       "activityType": "ride",
       "startedAt": "2026-07-22T06:45:00Z",
       "distanceMeters": 30500,
@@ -33,7 +33,7 @@
       "movingTimeSeconds": 4210,
       "elevationGainMeters": 315,
       "routeSummary": {
-        "polyline": "fixture_polyline_two",
+        "polyline": "fixture_polyline_coastline_sprint",
         "previewBounds": {
           "southWest": { "latitude": 41.36, "longitude": 2.1 },
           "northEast": { "latitude": 41.43, "longitude": 2.2 }
@@ -41,10 +41,51 @@
       },
       "importStatus": "eligible",
       "processedStageId": null
+    },
+    {
+      "id": "activity-003",
+      "riderId": "rider-001",
+      "provider": "fixture",
+      "providerActivityId": "fixture-ride-flat-recovery",
+      "activityType": "ride",
+      "startedAt": "2026-07-29T06:55:00Z",
+      "distanceMeters": 15800,
+      "elapsedTimeSeconds": 2450,
+      "movingTimeSeconds": 2312,
+      "elevationGainMeters": 45,
+      "routeSummary": {
+        "polyline": "fixture_polyline_flat_recovery",
+        "previewBounds": {
+          "southWest": { "latitude": 41.38, "longitude": 2.14 },
+          "northEast": { "latitude": 41.41, "longitude": 2.18 }
+        }
+      },
+      "importStatus": "failed",
+      "processedStageId": null
+    },
+    {
+      "id": "activity-004",
+      "riderId": "rider-001",
+      "provider": "fixture",
+      "providerActivityId": "fixture-ride-duplicate",
+      "activityType": "ride",
+      "startedAt": "2026-07-18T07:31:00Z",
+      "distanceMeters": 42195,
+      "elapsedTimeSeconds": 6130,
+      "movingTimeSeconds": 5898,
+      "elevationGainMeters": 681,
+      "routeSummary": {
+        "polyline": "fixture_polyline_duplicate",
+        "previewBounds": {
+          "southWest": { "latitude": 41.34, "longitude": 2.08 },
+          "northEast": { "latitude": 41.46, "longitude": 2.22 }
+        }
+      },
+      "importStatus": "duplicate",
+      "processedStageId": "stage-001"
     }
   ],
   "pagination": {
     "nextCursor": null
   }
 }
-

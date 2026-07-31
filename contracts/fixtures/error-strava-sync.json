@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "strava_sync_failed",
+    "message": "The last Strava sync could not be completed.",
+    "requestId": "req_fixture_strava_sync"
+  }
+}

@@ -29,6 +29,34 @@
       },
       "createdAt": "2026-07-01T10:00:00Z",
       "updatedAt": "2026-07-20T10:00:00Z"
+    },
+    {
+      "id": "rider-003",
+      "userId": "user-003",
+      "displayName": "Nora",
+      "appearance": {
+        "jerseyColor": "#9B51E0",
+        "accentColor": "#56CCF2",
+        "helmetColor": "#F2F2F2",
+        "bikeColor": "#333333",
+        "pattern": "solid"
+      },
+      "createdAt": "2026-07-02T09:00:00Z",
+      "updatedAt": "2026-07-20T10:00:00Z"
+    },
+    {
+      "id": "rider-004",
+      "userId": "user-004",
+      "displayName": "Iker",
+      "appearance": {
+        "jerseyColor": "#F2994A",
+        "accentColor": "#2D9CDB",
+        "helmetColor": "#111111",
+        "bikeColor": "#F2C94C",
+        "pattern": "stripes"
+      },
+      "createdAt": "2026-07-03T09:00:00Z",
+      "updatedAt": "2026-07-20T10:00:00Z"
     }
   ],
   "markers": [
@@ -58,30 +86,37 @@
       "timeSeconds": 0,
       "positions": [
         { "riderId": "rider-001", "positionMeters": 0, "speedMetersPerSecond": 8.8, "markerEventId": null },
-        { "riderId": "rider-002", "positionMeters": 0, "speedMetersPerSecond": 8.7, "markerEventId": null }
+        { "riderId": "rider-002", "positionMeters": 0, "speedMetersPerSecond": 8.7, "markerEventId": null },
+        { "riderId": "rider-003", "positionMeters": 0, "speedMetersPerSecond": 8.5, "markerEventId": null },
+        { "riderId": "rider-004", "positionMeters": 0, "speedMetersPerSecond": 8.4, "markerEventId": null }
       ]
     },
     {
       "timeSeconds": 1500,
       "positions": [
         { "riderId": "rider-001", "positionMeters": 12030, "speedMetersPerSecond": 9.3, "markerEventId": "marker-sprint-001" },
-        { "riderId": "rider-002", "positionMeters": 11970, "speedMetersPerSecond": 9.1, "markerEventId": null }
+        { "riderId": "rider-002", "positionMeters": 11970, "speedMetersPerSecond": 9.1, "markerEventId": null },
+        { "riderId": "rider-003", "positionMeters": 11890, "speedMetersPerSecond": 8.9, "markerEventId": null },
+        { "riderId": "rider-004", "positionMeters": 11780, "speedMetersPerSecond": 8.7, "markerEventId": null }
       ]
     },
     {
       "timeSeconds": 3000,
       "positions": [
         { "riderId": "rider-001", "positionMeters": 30940, "speedMetersPerSecond": 6.2, "markerEventId": null },
-        { "riderId": "rider-002", "positionMeters": 31020, "speedMetersPerSecond": 6.5, "markerEventId": "marker-climb-001" }
+        { "riderId": "rider-002", "positionMeters": 31020, "speedMetersPerSecond": 6.5, "markerEventId": "marker-climb-001" },
+        { "riderId": "rider-003", "positionMeters": 30680, "speedMetersPerSecond": 6.0, "markerEventId": null },
+        { "riderId": "rider-004", "positionMeters": 30420, "speedMetersPerSecond": 5.8, "markerEventId": null }
       ]
     },
     {
       "timeSeconds": 3600,
       "positions": [
         { "riderId": "rider-001", "positionMeters": 42195, "speedMetersPerSecond": 8.0, "markerEventId": null },
-        { "riderId": "rider-002", "positionMeters": 42195, "speedMetersPerSecond": 7.8, "markerEventId": null }
+        { "riderId": "rider-002", "positionMeters": 42195, "speedMetersPerSecond": 7.8, "markerEventId": null },
+        { "riderId": "rider-003", "positionMeters": 42195, "speedMetersPerSecond": 7.5, "markerEventId": null },
+        { "riderId": "rider-004", "positionMeters": 42195, "speedMetersPerSecond": 7.2, "markerEventId": null }
       ]
     }
   ]
 }
-

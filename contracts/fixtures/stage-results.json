@@ -6,7 +6,9 @@
       "type": "sprint",
       "crossings": [
         { "riderId": "rider-001", "crossedAtSeconds": 1498, "rank": 1, "points": 20 },
-        { "riderId": "rider-002", "crossedAtSeconds": 1506, "rank": 2, "points": 17 }
+        { "riderId": "rider-002", "crossedAtSeconds": 1506, "rank": 2, "points": 17 },
+        { "riderId": "rider-003", "crossedAtSeconds": 1516, "rank": 3, "points": 15 },
+        { "riderId": "rider-004", "crossedAtSeconds": 1531, "rank": 4, "points": 13 }
       ]
     },
     {
@@ -14,7 +16,9 @@
       "type": "climb",
       "crossings": [
         { "riderId": "rider-002", "crossedAtSeconds": 2997, "rank": 1, "points": 10 },
-        { "riderId": "rider-001", "crossedAtSeconds": 3011, "rank": 2, "points": 8 }
+        { "riderId": "rider-001", "crossedAtSeconds": 3011, "rank": 2, "points": 8 },
+        { "riderId": "rider-003", "crossedAtSeconds": 3058, "rank": 3, "points": 6 },
+        { "riderId": "rider-004", "crossedAtSeconds": 3095, "rank": 4, "points": 4 }
       ]
     }
   ],
@@ -36,6 +40,24 @@
       "finishBonus": 3,
       "todayTotal": 30,
       "gcTimeSeconds": 5924
+    },
+    {
+      "stageId": "stage-001",
+      "riderId": "rider-003",
+      "sprintPoints": 15,
+      "komPoints": 6,
+      "finishBonus": 1,
+      "todayTotal": 22,
+      "gcTimeSeconds": 6015
+    },
+    {
+      "stageId": "stage-001",
+      "riderId": "rider-004",
+      "sprintPoints": 13,
+      "komPoints": 4,
+      "finishBonus": 0,
+      "todayTotal": 17,
+      "gcTimeSeconds": 6118
     }
   ],
   "jerseyLeaders": {
@@ -44,4 +66,3 @@
     "yellow": "rider-001"
   }
 }
-
