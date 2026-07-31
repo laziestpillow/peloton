@@ -21,6 +21,7 @@ jobs:
       GH_TOKEN: ${{ secrets.PROJECTS_TOKEN || github.token }}
       PROJECT_OWNER: laziestpillow
       PROJECT_NUMBER: "1"
+      REPOSITORY: ${{ github.repository }}
       STATUS_FIELD: Status
       TARGET_STATUS: In Review
       PR_BODY: ${{ github.event.pull_request.body }}
@@ -46,21 +47,55 @@ jobs:
             exit 0
           fi
 
-          project_json="$(gh project view "${PROJECT_NUMBER}" \
-            --owner "${PROJECT_OWNER}" \
-            --format json)"
-          project_id="$(printf '%s' "${project_json}" | jq -r '.id')"
+          project_data="$(gh api graphql \
+            -F login="${PROJECT_OWNER}" \
+            -F number="${PROJECT_NUMBER}" \
+            -f query='
+              query($login: String!, $number: Int!) {
+                user(login: $login) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 100) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            number
+                            repository {
+                              nameWithOwner
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }')"
 
-          fields_json="$(gh project field-list "${PROJECT_NUMBER}" \
-            --owner "${PROJECT_OWNER}" \
-            --format json \
-            --limit 100)"
-          status_field_id="$(printf '%s' "${fields_json}" |
+          project_id="$(printf '%s' "${project_data}" | jq -r '.data.user.projectV2.id // empty')"
+          status_field_id="$(printf '%s' "${project_data}" |
             jq -r --arg name "${STATUS_FIELD}" \
-              '.fields[] | select(.name == $name) | .id')"
-          target_status_id="$(printf '%s' "${fields_json}" |
+              '.data.user.projectV2.fields.nodes[] | select(.name == $name) | .id')"
+          target_status_id="$(printf '%s' "${project_data}" |
             jq -r --arg field "${STATUS_FIELD}" --arg option "${TARGET_STATUS}" \
-              '.fields[] | select(.name == $field) | .options[] | select(.name == $option) | .id')"
+              '.data.user.projectV2.fields.nodes[] | select(.name == $field) | .options[] | select(.name == $option) | .id')"
+
+          if [ -z "${project_id}" ] || [ "${project_id}" = "null" ]; then
+            echo "Project ${PROJECT_OWNER}/${PROJECT_NUMBER} was not found or token cannot access it."
+            exit 1
+          fi
 
           if [ -z "${status_field_id}" ] || [ "${status_field_id}" = "null" ]; then
             echo "Project field '${STATUS_FIELD}' was not found."
@@ -73,24 +108,36 @@ jobs:
           fi
 
           for issue_number in ${issue_numbers}; do
-            item_json="$(gh project item-list "${PROJECT_NUMBER}" \
-              --owner "${PROJECT_OWNER}" \
-              --format json \
-              --limit 100 \
-              --jq ".items[] | select(.content.number == ${issue_number})")"
-
-            item_id="$(printf '%s' "${item_json}" | jq -r '.id // empty')"
+            item_id="$(printf '%s' "${project_data}" |
+              jq -r --argjson number "${issue_number}" --arg repo "${REPOSITORY}" \
+                '.data.user.projectV2.items.nodes[] |
+                  select(.content.number == $number and .content.repository.nameWithOwner == $repo) |
+                  .id')"
 
             if [ -z "${item_id}" ]; then
               echo "Issue #${issue_number} is not in project ${PROJECT_OWNER}/${PROJECT_NUMBER}; skipping."
               continue
             fi
 
-            gh project item-edit \
-              --id "${item_id}" \
-              --project-id "${project_id}" \
-              --field-id "${status_field_id}" \
-              --single-select-option-id "${target_status_id}"
+            gh api graphql \
+              -F projectId="${project_id}" \
+              -F itemId="${item_id}" \
+              -F fieldId="${status_field_id}" \
+              -F optionId="${target_status_id}" \
+              -f query='
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { singleSelectOptionId: $optionId }
+                  }) {
+                    projectV2Item {
+                      id
+                    }
+                  }
+                }' \
+              >/dev/null
 
             echo "Moved issue #${issue_number} to ${TARGET_STATUS}."
           done
