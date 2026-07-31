@@ -133,6 +133,31 @@ describe("server repository-backed routes", () => {
         lastSyncedAt: null
       });
 
+      const sync = await app.inject({
+        method: "POST",
+        url: "/v1/activities/sync",
+        headers: { ...userOneAuth, "idempotency-key": "server-sync-001" }
+      });
+      expect(sync.statusCode).toBe(202);
+      expect(sync.json()).toMatchObject({ status: "accepted" });
+
+      const repeatedSync = await app.inject({
+        method: "POST",
+        url: "/v1/activities/sync",
+        headers: { ...userOneAuth, "idempotency-key": "server-sync-001" }
+      });
+      expect(repeatedSync.statusCode).toBe(202);
+      expect(repeatedSync.json()).toEqual({
+        status: "alreadyRunning",
+        requestedAt: sync.json().requestedAt
+      });
+
+      const activities = await app.inject({ method: "GET", url: "/v1/activities", headers: userOneAuth });
+      expect(activities.statusCode).toBe(200);
+      expect(activities.json().data).toEqual(expect.arrayContaining([
+        expect.objectContaining({ provider: "strava", providerActivityId: "mock-strava-001", importStatus: "eligible" })
+      ]));
+
       const disconnect = await app.inject({ method: "DELETE", url: "/v1/integrations/strava", headers: userOneAuth });
       expect(disconnect.statusCode).toBe(204);
 

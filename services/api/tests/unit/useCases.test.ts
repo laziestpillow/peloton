@@ -1,5 +1,14 @@
 import { describe, expect, test } from "vitest";
-import { createApplicationUseCases, type ApplicationRepository, type StravaConnection, type StravaConnectionInput, type StravaOAuthState } from "../../src/application/useCases.js";
+import {
+  createApplicationUseCases,
+  type ActivitySyncStart,
+  type ApplicationRepository,
+  type ImportedActivityInput,
+  type StravaConnection,
+  type StravaConnectionInput,
+  type StravaConnectionUpdate,
+  type StravaOAuthState
+} from "../../src/application/useCases.js";
 import type { ApiFixtureData } from "../../src/application/fixtureData.js";
 import type {
   ActivityListResponse,
@@ -59,18 +68,20 @@ const fixtureData: ApiFixtureData = {
 
 class InMemoryRepository implements ApplicationRepository {
   private currentRider: RiderProfile | null = rider;
+  readonly activities = new Map<string, ImportedActivity>([[activity.providerActivityId, activity]]);
   readonly stravaStates = new Map<string, StravaOAuthState>();
   readonly stravaConnections = new Map<string, StravaConnection>();
+  readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
 
   async listActivities(userId: string): Promise<ActivityListResponse> {
     return {
-      data: userId === rider.userId ? [activity] : [],
+      data: userId === rider.userId ? Array.from(this.activities.values()) : [],
       pagination: { nextCursor: null }
     };
   }
 
   async getActivity(input: { activityId: string; userId: string }): Promise<ImportedActivity | null> {
-    return input.userId === rider.userId && activity.id === input.activityId ? activity : null;
+    return input.userId === rider.userId ? Array.from(this.activities.values()).find((candidate) => candidate.id === input.activityId) ?? null : null;
   }
 
   async getCurrentRider(userId: string): Promise<RiderProfile | null> {
@@ -151,9 +162,67 @@ class InMemoryRepository implements ApplicationRepository {
     return this.stravaConnections.get(userId) ?? null;
   }
 
-  async updateStravaConnection(input: StravaConnectionInput): Promise<void> {
+  async updateStravaConnection(input: StravaConnectionUpdate): Promise<void> {
     const existing = this.stravaConnections.get(input.userId);
-    this.stravaConnections.set(input.userId, { ...input, lastSyncedAt: existing?.lastSyncedAt ?? null });
+    this.stravaConnections.set(input.userId, { ...input, lastSyncedAt: input.lastSyncedAt !== undefined ? input.lastSyncedAt : existing?.lastSyncedAt ?? null });
+  }
+
+  async beginActivitySync(input: { userId: string; idempotencyKey: string | null; requestedAt: Date }): Promise<ActivitySyncStart> {
+    const existing = Array.from(this.activitySyncRequests.values()).find((sync) =>
+      sync.userId === input.userId && input.idempotencyKey !== null && sync.idempotencyKey === input.idempotencyKey
+    );
+    if (existing) {
+      return { syncId: existing.syncId, status: "alreadyRunning", requestedAt: existing.requestedAt };
+    }
+
+    const running = Array.from(this.activitySyncRequests.values()).find((sync) => sync.userId === input.userId && sync.syncStatus === "running");
+    if (running) {
+      return { syncId: running.syncId, status: "alreadyRunning", requestedAt: running.requestedAt };
+    }
+
+    const sync = {
+      syncId: `sync-${this.activitySyncRequests.size + 1}`,
+      userId: input.userId,
+      idempotencyKey: input.idempotencyKey,
+      status: "accepted" as const,
+      syncStatus: "running" as const,
+      requestedAt: input.requestedAt
+    };
+    this.activitySyncRequests.set(sync.syncId, sync);
+    return { syncId: sync.syncId, status: sync.status, requestedAt: sync.requestedAt };
+  }
+
+  async completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void> {
+    const sync = this.activitySyncRequests.get(input.syncId);
+    if (sync && sync.userId === input.userId) {
+      this.activitySyncRequests.set(input.syncId, { ...sync, syncStatus: input.status });
+    }
+  }
+
+  async upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
+    const existing = this.activities.get(input.providerActivityId);
+    if (existing) {
+      const duplicate = { ...existing, importStatus: "duplicate" as const };
+      this.activities.set(input.providerActivityId, duplicate);
+      return { activity: duplicate, duplicate: true };
+    }
+    const imported: ImportedActivity = {
+      id: `activity-${this.activities.size + 1}`,
+      riderId: input.riderId,
+      provider: input.provider,
+      providerActivityId: input.providerActivityId,
+      activityType: input.activityType,
+      startedAt: input.startedAt.toISOString(),
+      distanceMeters: input.distanceMeters,
+      elapsedTimeSeconds: input.elapsedTimeSeconds,
+      movingTimeSeconds: input.movingTimeSeconds,
+      elevationGainMeters: input.elevationGainMeters,
+      routeSummary: input.routeSummary,
+      importStatus: input.importStatus,
+      processedStageId: input.processedStageId
+    };
+    this.activities.set(input.providerActivityId, imported);
+    return { activity: imported, duplicate: false };
   }
 }
 
@@ -339,6 +408,80 @@ describe("application use cases", () => {
     await useCases.refreshStravaConnection();
 
     expect(repository.stravaConnections.get("user-001")).toMatchObject({ status: "error" });
+  });
+
+  test("syncs recent Strava activities and updates last synced time", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection());
+    const gateway = new MockStravaGateway([
+      {
+        providerActivityId: "strava-ride-001",
+        sportType: "Ride",
+        startedAt: "2026-07-30T06:15:00Z",
+        distanceMeters: 25000,
+        elapsedTimeSeconds: 3600,
+        movingTimeSeconds: 3400,
+        elevationGainMeters: 420,
+        polyline: "strava_polyline"
+      },
+      {
+        providerActivityId: "strava-run-001",
+        sportType: "Run",
+        startedAt: "2026-07-29T06:15:00Z",
+        distanceMeters: 8000,
+        elapsedTimeSeconds: 2100,
+        movingTimeSeconds: 2050,
+        elevationGainMeters: 75
+      }
+    ]);
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    await expect(useCases.syncActivities({ idempotencyKey: "sync-key-001" })).resolves.toEqual({
+      status: "accepted",
+      requestedAt: "2026-07-31T10:00:00.000Z"
+    });
+
+    expect(repository.activities.get("strava-ride-001")).toMatchObject({
+      provider: "strava",
+      importStatus: "eligible",
+      movingTimeSeconds: 3400
+    });
+    expect(repository.activities.get("strava-run-001")).toMatchObject({ importStatus: "unsupported" });
+    expect(repository.stravaConnections.get("user-001")?.lastSyncedAt).toEqual(new Date("2026-07-31T10:00:00.000Z"));
+  });
+
+  test("prevents duplicate activity syncs by idempotency key", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection());
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices());
+
+    await expect(useCases.syncActivities({ idempotencyKey: "same-sync" })).resolves.toMatchObject({ status: "accepted" });
+    await expect(useCases.syncActivities({ idempotencyKey: "same-sync" })).resolves.toEqual({
+      status: "alreadyRunning",
+      requestedAt: "2026-07-31T10:00:00.000Z"
+    });
+  });
+
+  test("marks repeated provider activities as duplicates", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection());
+    const gateway = new MockStravaGateway([
+      {
+        providerActivityId: "strava-duplicate-001",
+        sportType: "Ride",
+        startedAt: "2026-07-30T06:15:00Z",
+        distanceMeters: 25000,
+        elapsedTimeSeconds: 3600,
+        movingTimeSeconds: 3400,
+        elevationGainMeters: 420
+      }
+    ]);
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    await useCases.syncActivities({ idempotencyKey: "first-sync" });
+    await useCases.syncActivities({ idempotencyKey: "second-sync" });
+
+    expect(repository.activities.get("strava-duplicate-001")).toMatchObject({ importStatus: "duplicate" });
   });
 
   test("disconnects Strava by revoking refresh token and marking connection revoked", async () => {
