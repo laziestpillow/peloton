@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import type {
   ActivitySyncStart,
+  ActivityStageMatchInput,
   ApplicationRepository,
   ActivityStreamSamplesInput,
   ImportedActivityInput,
@@ -20,7 +21,8 @@ import type {
   RiderAppearance,
   RiderProfile,
   RouteSummary,
-  Stage
+  Stage,
+  StageMarkerCrossing
 } from "../../domain/models.js";
 import type { Database } from "../database/client.js";
 import {
@@ -32,6 +34,8 @@ import {
   riderProfiles,
   seasons,
   stageMarkers,
+  stageActivityResults,
+  stageMarkerCrossings,
   stageRoutePoints,
   stages,
   stravaConnections,
@@ -151,6 +155,18 @@ function toStage(
     orderedMarkers: markerRows.map(toMarker),
     scheduledAt: toIsoString(row.scheduledAt),
     status: row.status
+  };
+}
+
+function toStageMarkerCrossing(row: typeof stageMarkerCrossings.$inferSelect): StageMarkerCrossing {
+  return {
+    stageId: row.stageId,
+    markerId: row.markerId,
+    activityId: row.activityId,
+    riderId: row.riderId,
+    crossedAtSeconds: row.crossedAtSeconds,
+    rank: row.rank,
+    points: row.points
   };
 }
 
@@ -501,5 +517,71 @@ export class PostgresRepository implements ApplicationRepository {
       altitudeMeters: sample.altitudeMeters,
       velocityMetersPerSecond: sample.velocityMetersPerSecond
     })));
+  }
+
+  async listMatchableStages(): Promise<readonly Stage[]> {
+    const rows = await this.db.select({ id: stages.id }).from(stages).orderBy(asc(stages.scheduledAt));
+    const data = await Promise.all(rows.map((row) => this.getStage(row.id)));
+    return data.filter((stage): stage is Stage => stage !== null);
+  }
+
+  async listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]> {
+    const rows = await this.db
+      .select()
+      .from(stageMarkerCrossings)
+      .where(eq(stageMarkerCrossings.stageId, stageId))
+      .orderBy(asc(stageMarkerCrossings.markerId), asc(stageMarkerCrossings.rank));
+    return rows.map(toStageMarkerCrossing);
+  }
+
+  async saveActivityStageMatch(input: ActivityStageMatchInput): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .insert(stageActivityResults)
+        .values({
+          stageId: input.stageId,
+          activityId: input.activityId,
+          riderId: input.riderId,
+          finishTimeSeconds: input.finishTimeSeconds,
+          matchedAt: input.matchedAt
+        })
+        .onConflictDoUpdate({
+          target: [stageActivityResults.stageId, stageActivityResults.riderId],
+          set: {
+            activityId: input.activityId,
+            finishTimeSeconds: input.finishTimeSeconds,
+            matchedAt: input.matchedAt
+          }
+        });
+
+      await tx
+        .update(importedActivities)
+        .set({ importStatus: "processing", processedStageId: input.stageId })
+        .where(eq(importedActivities.id, input.activityId));
+
+      if (input.markerCrossings.length === 0) {
+        await tx
+          .delete(stageMarkerCrossings)
+          .where(and(eq(stageMarkerCrossings.stageId, input.stageId), eq(stageMarkerCrossings.riderId, input.riderId)));
+        return;
+      }
+
+      const markerIds = [...new Set(input.markerCrossings.map((crossing) => crossing.markerId))];
+      for (const markerId of markerIds) {
+        await tx
+          .delete(stageMarkerCrossings)
+          .where(and(eq(stageMarkerCrossings.stageId, input.stageId), eq(stageMarkerCrossings.markerId, markerId)));
+      }
+
+      await tx.insert(stageMarkerCrossings).values(input.markerCrossings.map((crossing) => ({
+        stageId: crossing.stageId,
+        markerId: crossing.markerId,
+        activityId: crossing.activityId,
+        riderId: crossing.riderId,
+        crossedAtSeconds: crossing.crossedAtSeconds,
+        rank: crossing.rank,
+        points: crossing.points
+      })));
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createApplicationUseCases,
+  type ActivityStageMatchInput,
   type ActivitySyncStart,
   type ApplicationRepository,
   type ActivityStreamSamplesInput,
@@ -19,7 +20,9 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
-  Stage
+  Stage,
+  StageActivityResult,
+  StageMarkerCrossing
 } from "../../src/domain/models.js";
 import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
 import type { StravaActivityStreams, StravaGateway, StravaTokenExchange } from "../../src/infrastructure/strava/StravaGateway.js";
@@ -104,6 +107,8 @@ class InMemoryRepository implements ApplicationRepository {
   readonly stravaConnections = new Map<string, StravaConnection>();
   readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
   readonly streamSamples = new Map<string, readonly ActivityStreamSample[]>();
+  readonly stageActivityResults = new Map<string, StageActivityResult>();
+  readonly stageMarkerCrossings = new Map<string, StageMarkerCrossing>();
 
   async listActivities(userId: string): Promise<ActivityListResponse> {
     return {
@@ -271,6 +276,38 @@ class InMemoryRepository implements ApplicationRepository {
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
     this.streamSamples.set(input.activityId, input.samples);
+  }
+
+  async listMatchableStages(): Promise<readonly Stage[]> {
+    return [stage];
+  }
+
+  async listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]> {
+    return Array.from(this.stageMarkerCrossings.values()).filter((crossing) => crossing.stageId === stageId);
+  }
+
+  async saveActivityStageMatch(input: ActivityStageMatchInput): Promise<void> {
+    this.stageActivityResults.set(`${input.stageId}:${input.riderId}`, {
+      stageId: input.stageId,
+      activityId: input.activityId,
+      riderId: input.riderId,
+      finishTimeSeconds: input.finishTimeSeconds,
+      matchedAt: input.matchedAt.toISOString()
+    });
+    for (const [providerActivityId, imported] of this.activities) {
+      if (imported.id === input.activityId) {
+        this.activities.set(providerActivityId, { ...imported, importStatus: "processing", processedStageId: input.stageId });
+      }
+    }
+    const markerIds = new Set(input.markerCrossings.map((crossing) => crossing.markerId));
+    for (const [key, crossing] of this.stageMarkerCrossings) {
+      if (crossing.stageId === input.stageId && markerIds.has(crossing.markerId)) {
+        this.stageMarkerCrossings.delete(key);
+      }
+    }
+    for (const crossing of input.markerCrossings) {
+      this.stageMarkerCrossings.set(`${crossing.stageId}:${crossing.markerId}:${crossing.riderId}`, crossing);
+    }
   }
 }
 
@@ -566,6 +603,57 @@ describe("application use cases", () => {
 
     expect(repository.activities.get("strava-stream-failure-001")).toMatchObject({ importStatus: "failed" });
     expect(repository.stravaConnections.get("user-001")?.status).toBe("connected");
+  });
+
+  test("matches imported Strava rides to stages and persists ranked marker crossings", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection());
+    const gateway = new MockStravaGateway([
+      {
+        providerActivityId: "strava-stage-match-001",
+        sportType: "Ride",
+        startedAt: "2026-07-18T07:30:00Z",
+        distanceMeters: 42195,
+        elapsedTimeSeconds: 3600,
+        movingTimeSeconds: 3400,
+        elevationGainMeters: 420
+      }
+    ], new Map([
+      ["strava-stage-match-001", {
+        time: [0, 120, 1000],
+        distance: [0, 12000, 42195],
+        latlng: [
+          [41.38, 2.15],
+          [41.39, 2.16],
+          [41.46, 2.22]
+        ],
+        altitude: [32, 36, 90],
+        velocitySmooth: [0, 8.2, 9.1]
+      }]
+    ]));
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    await useCases.syncActivities({ idempotencyKey: "stage-match" });
+
+    const imported = repository.activities.get("strava-stage-match-001");
+    expect(imported).toMatchObject({ importStatus: "processing", processedStageId: "stage-001" });
+    expect(repository.stageActivityResults.get("stage-001:rider-001")).toMatchObject({
+      stageId: "stage-001",
+      activityId: imported?.id,
+      riderId: "rider-001",
+      finishTimeSeconds: 1000
+    });
+    expect([...repository.stageMarkerCrossings.values()]).toEqual([
+      {
+        stageId: "stage-001",
+        markerId: "marker-sprint-001",
+        activityId: imported?.id,
+        riderId: "rider-001",
+        crossedAtSeconds: 120,
+        rank: 1,
+        points: 20
+      }
+    ]);
   });
 
   test("prevents duplicate activity syncs by idempotency key", async () => {
