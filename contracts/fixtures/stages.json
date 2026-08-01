@@ -1,0 +1,42 @@
+{
+  "data": [
+    {
+      "id": "stage-001",
+      "seasonId": "season-001",
+      "name": "Barcelona Hills",
+      "route": {
+        "distanceMeters": 42195,
+        "elevation": [
+          { "positionMeters": 0, "altitudeMeters": 35 },
+          { "positionMeters": 12000, "altitudeMeters": 42 },
+          { "positionMeters": 31000, "altitudeMeters": 215 },
+          { "positionMeters": 42195, "altitudeMeters": 88 }
+        ]
+      },
+      "orderedMarkers": [
+        {
+          "id": "marker-sprint-001",
+          "type": "sprint",
+          "positionMeters": 12000,
+          "latitude": 41.39,
+          "longitude": 2.16,
+          "geofenceRadiusMeters": 25,
+          "category": null,
+          "pointsSchedule": [20, 17, 15, 13, 11]
+        },
+        {
+          "id": "marker-climb-001",
+          "type": "climb",
+          "positionMeters": 31000,
+          "latitude": 41.42,
+          "longitude": 2.18,
+          "geofenceRadiusMeters": 25,
+          "category": 3,
+          "pointsSchedule": [10, 8, 6, 4, 2]
+        }
+      ],
+      "scheduledAt": "2026-07-18T07:30:00Z",
+      "status": "completed"
+    }
+  ]
+}

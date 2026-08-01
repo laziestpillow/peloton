@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 import type { AppConfig } from "../config/env.js";
+import { sendErrorResponse } from "./errors.js";
 
 export interface AuthenticatedSession {
   userId: string;
@@ -73,14 +74,14 @@ export function createSessionPreHandler(config: AppConfig) {
       try {
         await rateLimiter.consume(request.ip);
       } catch {
-        reply.status(429).send({ error: { code: "rate_limited", message: "Too many authentication attempts." } });
+        sendErrorResponse(reply, request, 429, "rate_limited", "Too many authentication attempts.");
         return;
       }
     }
 
     const sessionResult = resolveBearerSession(request, config);
     if (!sessionResult.ok) {
-      reply.status(401).send({ error: { code: sessionResult.error.code, message: sessionResult.error.message } });
+      sendErrorResponse(reply, request, 401, sessionResult.error.code, sessionResult.error.message);
       return;
     }
     request.authenticatedSession = sessionResult.session;

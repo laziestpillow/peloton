@@ -14,9 +14,11 @@ import type {
   Group,
   GroupMembership,
   ImportedActivity,
+  Marker,
   RiderAppearance,
   RiderProfile,
-  RouteSummary
+  RouteSummary,
+  Stage
 } from "../../domain/models.js";
 import type { Database } from "../database/client.js";
 import {
@@ -25,6 +27,10 @@ import {
   groups,
   importedActivities,
   riderProfiles,
+  seasons,
+  stageMarkers,
+  stageRoutePoints,
+  stages,
   stravaConnections,
   stravaOAuthStates
 } from "../database/schema.js";
@@ -103,6 +109,45 @@ function toGroupMembership(row: typeof groupMemberships.$inferSelect): GroupMemb
     role: row.role === "owner" ? "owner" : "member",
     status: toMembershipStatus(row.status),
     joinedAt: toIsoString(row.joinedAt)
+  };
+}
+
+function toPointsSchedule(value: unknown): readonly number[] {
+  return Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : [];
+}
+
+function toMarker(row: typeof stageMarkers.$inferSelect): Marker {
+  return {
+    id: row.id,
+    type: row.type,
+    positionMeters: row.positionMeters,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    geofenceRadiusMeters: row.geofenceRadiusMeters,
+    category: row.category,
+    pointsSchedule: toPointsSchedule(row.pointsSchedule)
+  };
+}
+
+function toStage(
+  row: typeof stages.$inferSelect,
+  routeRows: readonly (typeof stageRoutePoints.$inferSelect)[],
+  markerRows: readonly (typeof stageMarkers.$inferSelect)[]
+): Stage {
+  return {
+    id: row.id,
+    seasonId: row.seasonId,
+    name: row.name,
+    route: {
+      distanceMeters: row.distanceMeters,
+      elevation: routeRows.map((routePoint) => ({
+        positionMeters: routePoint.positionMeters,
+        altitudeMeters: routePoint.altitudeMeters
+      }))
+    },
+    orderedMarkers: markerRows.map(toMarker),
+    scheduledAt: toIsoString(row.scheduledAt),
+    status: row.status
   };
 }
 
@@ -241,6 +286,44 @@ export class PostgresRepository implements ApplicationRepository {
       throw new Error("Group membership insert did not return a row.");
     }
     return toGroupMembership(row);
+  }
+
+  async listGroupStages(groupId: string): Promise<{ data: readonly Stage[] }> {
+    const rows = await this.db
+      .select({ stage: stages })
+      .from(stages)
+      .innerJoin(seasons, eq(stages.seasonId, seasons.id))
+      .where(eq(seasons.groupId, groupId))
+      .orderBy(asc(stages.scheduledAt));
+    const data = await Promise.all(rows.map((row) => this.getStage(row.stage.id)));
+    return { data: data.filter((stage): stage is Stage => stage !== null) };
+  }
+
+  async getStage(stageId: string): Promise<Stage | null> {
+    const [stage] = await this.db.select().from(stages).where(eq(stages.id, stageId)).limit(1);
+    if (!stage) {
+      return null;
+    }
+
+    const [routeRows, markerRows] = await Promise.all([
+      this.db
+        .select()
+        .from(stageRoutePoints)
+        .where(eq(stageRoutePoints.stageId, stageId))
+        .orderBy(asc(stageRoutePoints.sequence)),
+      this.db.select().from(stageMarkers).where(eq(stageMarkers.stageId, stageId)).orderBy(asc(stageMarkers.sequence))
+    ]);
+    return toStage(stage, routeRows, markerRows);
+  }
+
+  async getStageGroupId(stageId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ groupId: seasons.groupId })
+      .from(stages)
+      .innerJoin(seasons, eq(stages.seasonId, seasons.id))
+      .where(eq(stages.id, stageId))
+      .limit(1);
+    return row?.groupId ?? null;
   }
 
   async createStravaOAuthState(input: StravaOAuthState): Promise<void> {

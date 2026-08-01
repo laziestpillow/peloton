@@ -31,6 +31,35 @@ const recapSchema = z.object({
   timeline: z.array(z.object({ timeSeconds: z.number().int(), positions: z.array(z.object({ riderId: z.string() }).passthrough()) }))
 });
 
+const markerSchema = z.object({
+  id: z.string(),
+  type: z.enum(["sprint", "climb"]),
+  positionMeters: z.number(),
+  latitude: z.number(),
+  longitude: z.number(),
+  geofenceRadiusMeters: z.number(),
+  category: z.number().int().min(1).max(4).nullable().optional(),
+  pointsSchedule: z.array(z.number().int())
+});
+
+const stagesSchema = z.object({
+  data: z.array(z.object({
+    id: z.string(),
+    seasonId: z.string(),
+    name: z.string(),
+    route: z.object({
+      distanceMeters: z.number(),
+      elevation: z.array(z.object({
+        positionMeters: z.number(),
+        altitudeMeters: z.number()
+      }))
+    }),
+    orderedMarkers: z.array(markerSchema),
+    scheduledAt: z.string().datetime(),
+    status: z.enum(["scheduled", "active", "completed"])
+  }))
+});
+
 const stageResultsSchema = z.object({
   stageId: z.string(),
   markerResults: z.array(z.object({ markerId: z.string(), crossings: z.array(z.object({ riderId: z.string(), rank: z.number().int(), points: z.number().int() })) })),
@@ -50,6 +79,7 @@ async function readJson(path: string): Promise<unknown> {
 export async function checkContract(): Promise<void> {
   YAML.parse(await readFile(resolve(root, "contracts/openapi.yaml"), "utf8"));
   activitiesSchema.parse(await readJson("contracts/fixtures/activities.json"));
+  stagesSchema.parse(await readJson("contracts/fixtures/stages.json"));
   recapSchema.parse(await readJson("contracts/fixtures/recap.json"));
   stageResultsSchema.parse(await readJson("contracts/fixtures/stage-results.json"));
   standingsSchema.parse(await readJson("contracts/fixtures/season-standings.json"));

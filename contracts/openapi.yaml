@@ -290,6 +290,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Stage"
+        "404":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
         "429":

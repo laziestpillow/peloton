@@ -1,12 +1,12 @@
 import { Pool } from "pg";
-import { loadConfig } from "../../config/env.js";
+import { assertSafeDatabaseTask, loadConfig } from "../../config/env.js";
 
 interface Migration {
   name: string;
   statements: readonly string[];
 }
 
-const migrations: readonly Migration[] = [
+export const migrations: readonly Migration[] = [
   {
     name: "0000_initial.sql",
     statements: [
@@ -81,6 +81,35 @@ const migrations: readonly Migration[] = [
     ]
   },
   {
+    name: "0002_strava_oauth_connection.sql",
+    statements: [
+      `
+        CREATE TABLE strava_oauth_states (
+          state text PRIMARY KEY,
+          user_id text NOT NULL REFERENCES users(id),
+          redirect_url text NOT NULL,
+          expires_at timestamptz NOT NULL,
+          consumed_at timestamptz,
+          created_at timestamptz NOT NULL
+        )
+      `,
+      `
+        CREATE TABLE strava_connections (
+          user_id text PRIMARY KEY REFERENCES users(id),
+          athlete_id text NOT NULL,
+          accepted_scopes jsonb NOT NULL,
+          encrypted_access_token text NOT NULL,
+          encrypted_refresh_token text NOT NULL,
+          access_token_expires_at timestamptz NOT NULL,
+          status connection_status NOT NULL,
+          last_synced_at timestamptz,
+          created_at timestamptz NOT NULL,
+          updated_at timestamptz NOT NULL
+        )
+      `
+    ]
+  },
+  {
     name: "0002_activity_sync_requests.sql",
     statements: [
       `
@@ -95,8 +124,63 @@ const migrations: readonly Migration[] = [
         )
       `
     ]
+  },
+  {
+    name: "0003_stage_season_foundation.sql",
+    statements: [
+      "CREATE TYPE marker_type AS ENUM ('sprint', 'climb')",
+      "CREATE TYPE stage_status AS ENUM ('scheduled', 'active', 'completed')",
+      `
+        CREATE TABLE seasons (
+          id text PRIMARY KEY,
+          group_id text NOT NULL REFERENCES groups(id),
+          name text NOT NULL,
+          starts_at timestamptz NOT NULL,
+          ends_at timestamptz,
+          created_at timestamptz NOT NULL,
+          updated_at timestamptz NOT NULL
+        )
+      `,
+      `
+        CREATE TABLE stages (
+          id text PRIMARY KEY,
+          season_id text NOT NULL REFERENCES seasons(id),
+          name text NOT NULL,
+          distance_meters numeric NOT NULL,
+          scheduled_at timestamptz NOT NULL,
+          status stage_status NOT NULL,
+          created_at timestamptz NOT NULL,
+          updated_at timestamptz NOT NULL
+        )
+      `,
+      `
+        CREATE TABLE stage_route_points (
+          stage_id text NOT NULL REFERENCES stages(id),
+          position_meters numeric NOT NULL,
+          altitude_meters numeric NOT NULL,
+          sequence integer NOT NULL,
+          PRIMARY KEY (stage_id, sequence)
+        )
+      `,
+      `
+        CREATE TABLE stage_markers (
+          id text PRIMARY KEY,
+          stage_id text NOT NULL REFERENCES stages(id),
+          type marker_type NOT NULL,
+          position_meters numeric NOT NULL,
+          latitude numeric NOT NULL,
+          longitude numeric NOT NULL,
+          geofence_radius_meters numeric NOT NULL,
+          category integer,
+          points_schedule jsonb NOT NULL,
+          sequence integer NOT NULL
+        )
+      `
+    ]
   }
 ];
+
+export const migrationNames = migrations.map((migration) => migration.name);
 
 export async function runMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -137,5 +221,6 @@ export async function runMigrations(databaseUrl: string): Promise<void> {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const config = loadConfig();
+  assertSafeDatabaseTask(config, "migration");
   await runMigrations(config.DATABASE_URL);
 }

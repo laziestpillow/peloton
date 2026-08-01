@@ -3,8 +3,25 @@ import { aggregateSeasonTotals, calculateStageScores, rankMarkerCrossings } from
 import type { Marker, MarkerCrossing } from "../../src/domain/models.js";
 
 describe("scoring", () => {
-  const sprint: Marker = { id: "sprint-1", type: "sprint", positionMeters: 1000, pointsSchedule: [20, 17, 15] };
-  const climb: Marker = { id: "climb-1", type: "climb", positionMeters: 2000, pointsSchedule: [10, 8, 6], category: 3 };
+  const sprint: Marker = {
+    id: "sprint-1",
+    type: "sprint",
+    positionMeters: 1000,
+    latitude: 41.39,
+    longitude: 2.16,
+    geofenceRadiusMeters: 25,
+    pointsSchedule: [20, 17, 15]
+  };
+  const climb: Marker = {
+    id: "climb-1",
+    type: "climb",
+    positionMeters: 2000,
+    latitude: 41.42,
+    longitude: 2.18,
+    geofenceRadiusMeters: 25,
+    pointsSchedule: [10, 8, 6],
+    category: 3
+  };
 
   test("ranks marker crossings by time and awards configured points", () => {
     const result = rankMarkerCrossings(sprint, [
@@ -53,4 +70,3 @@ describe("scoring", () => {
     expect(totals.get("rider-a")).toBe(10);
   });
 });
-

@@ -67,8 +67,31 @@ export interface Marker {
   id: string;
   type: MarkerType;
   positionMeters: number;
+  latitude: number;
+  longitude: number;
+  geofenceRadiusMeters: number;
   pointsSchedule: readonly number[];
   category?: number | null;
+}
+
+export interface RouteElevationPoint {
+  positionMeters: number;
+  altitudeMeters: number;
+}
+
+export interface RouteProfile {
+  distanceMeters: number;
+  elevation: readonly RouteElevationPoint[];
+}
+
+export interface Stage {
+  id: string;
+  seasonId: string;
+  name: string;
+  route: RouteProfile;
+  orderedMarkers: readonly Marker[];
+  scheduledAt: string;
+  status: "scheduled" | "active" | "completed";
 }
 
 export interface MarkerCrossing {
