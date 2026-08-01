@@ -21,6 +21,8 @@ const config: AppConfig = {
   STRAVA_CLIENT_ID: "12345",
   STRAVA_CLIENT_SECRET: "test-secret",
   STRAVA_CALLBACK_URL: "http://127.0.0.1:8080/v1/auth/strava/callback",
+  STRAVA_WEBHOOK_CALLBACK_URL: "http://127.0.0.1:8080/v1/webhooks/strava",
+  STRAVA_WEBHOOK_VERIFY_TOKEN: "dev-strava-webhook-token",
   STRAVA_OAUTH_SCOPE: "read,activity:read_all",
   STRAVA_OAUTH_STATE_TTL_SECONDS: 600,
   STRAVA_TOKEN_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000",
@@ -176,6 +178,72 @@ describe("server repository-backed routes", () => {
       const revokedStatus = await app.inject({ method: "GET", url: "/v1/integrations/strava/status", headers: userOneAuth });
       expect(revokedStatus.statusCode).toBe(200);
       expect(revokedStatus.json()).toMatchObject({ status: "revoked" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("handles Strava webhook verification and events on a public route", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository, stravaGateway: new MockStravaGateway() });
+
+    try {
+      const verified = await app.inject({
+        method: "GET",
+        url: "/v1/webhooks/strava?hub.mode=subscribe&hub.verify_token=dev-strava-webhook-token&hub.challenge=challenge-123"
+      });
+      expect(verified.statusCode).toBe(200);
+      expect(verified.json()).toEqual({ "hub.challenge": "challenge-123" });
+
+      const rejected = await app.inject({
+        method: "GET",
+        url: "/v1/webhooks/strava?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=challenge-123"
+      });
+      expect(rejected.statusCode).toBe(403);
+
+      const event = await app.inject({
+        method: "POST",
+        url: "/v1/webhooks/strava",
+        payload: {
+          object_type: "activity",
+          object_id: 1360128428,
+          aspect_type: "create",
+          owner_id: 134815,
+          subscription_id: 120475,
+          event_time: 1516126040
+        }
+      });
+      expect(event.statusCode).toBe(200);
+      expect(event.json()).toEqual({ status: "accepted" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("manages Strava webhook subscriptions through protected routes", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const gateway = new MockStravaGateway();
+    const app = await buildServer(config, { repository, stravaGateway: gateway });
+
+    try {
+      const created = await app.inject({ method: "POST", url: "/v1/integrations/strava/webhook-subscription", headers: userOneAuth });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toEqual({ id: 1 });
+
+      const listed = await app.inject({ method: "GET", url: "/v1/integrations/strava/webhook-subscription", headers: userOneAuth });
+      expect(listed.statusCode).toBe(200);
+      expect(listed.json()).toMatchObject({
+        data: [
+          {
+            id: 1,
+            applicationId: 12345,
+            callbackUrl: config.STRAVA_WEBHOOK_CALLBACK_URL
+          }
+        ]
+      });
+
+      const deleted = await app.inject({ method: "DELETE", url: "/v1/integrations/strava/webhook-subscription?subscriptionId=1", headers: userOneAuth });
+      expect(deleted.statusCode).toBe(204);
     } finally {
       await app.close();
     }

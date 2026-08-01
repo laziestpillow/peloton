@@ -76,6 +76,115 @@ paths:
           $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /v1/integrations/strava/webhook-subscription:
+    get:
+      operationId: listStravaWebhookSubscriptions
+      tags: [Integrations]
+      responses:
+        "200":
+          description: Current Strava webhook subscriptions for the app.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StravaWebhookSubscription"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    post:
+      operationId: createStravaWebhookSubscription
+      tags: [Integrations]
+      responses:
+        "201":
+          description: Created Strava webhook subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StravaWebhookSubscriptionCreateResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      operationId: deleteStravaWebhookSubscription
+      tags: [Integrations]
+      parameters:
+        - name: subscriptionId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted Strava webhook subscription.
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /v1/webhooks/strava:
+    get:
+      operationId: verifyStravaWebhook
+      tags: [Integrations]
+      security: []
+      parameters:
+        - name: hub.mode
+          in: query
+          required: true
+          schema: { type: string }
+        - name: hub.challenge
+          in: query
+          required: true
+          schema: { type: string }
+        - name: hub.verify_token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Strava webhook verification challenge.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hub.challenge]
+                properties:
+                  hub.challenge: { type: string }
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: receiveStravaWebhookEvent
+      tags: [Integrations]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StravaWebhookEvent"
+      responses:
+        "200":
+          description: Webhook event acknowledged.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [accepted]
+        "400":
+          $ref: "#/components/responses/Error"
   /v1/activities/sync:
     post:
       operationId: syncActivities
@@ -476,6 +585,42 @@ components:
         lastSyncedAt:
           type: [string, "null"]
           format: date-time
+    StravaWebhookSubscription:
+      type: object
+      required: [id, applicationId, callbackUrl, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        applicationId: { type: integer }
+        callbackUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    StravaWebhookSubscriptionCreateResponse:
+      type: object
+      required: [id]
+      properties:
+        id: { type: integer }
+    StravaWebhookEvent:
+      type: object
+      required: [object_type, object_id, aspect_type, owner_id, subscription_id, event_time]
+      properties:
+        object_type:
+          type: string
+          enum: [activity, athlete]
+        object_id:
+          type: integer
+        aspect_type:
+          type: string
+          enum: [create, update, delete]
+        owner_id:
+          type: integer
+        subscription_id:
+          type: integer
+        event_time:
+          type: integer
+        updates:
+          type: object
+          additionalProperties:
+            type: string
     ActivitySyncResponse:
       type: object
       required: [status, requestedAt]

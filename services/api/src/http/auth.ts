@@ -55,7 +55,7 @@ export function resolveBearerSession(request: FastifyRequest, config: AppConfig)
 }
 
 function isPublicPath(path: string): boolean {
-  return path === "/health" || path === "/v1/auth/strava/callback" || path.startsWith("/docs");
+  return path === "/health" || path === "/v1/auth/strava/callback" || path === "/v1/webhooks/strava" || path.startsWith("/docs");
 }
 
 export function createSessionPreHandler(config: AppConfig) {

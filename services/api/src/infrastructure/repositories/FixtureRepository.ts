@@ -9,6 +9,7 @@ import type {
   StravaConnection,
   StravaConnectionInput,
   StravaConnectionUpdate,
+  StravaWebhookEventInput,
   StravaOAuthState
 } from "../../application/useCases.js";
 import type {
@@ -34,6 +35,7 @@ export class FixtureRepository implements ApplicationRepository {
   private readonly streamSamples = new Map<string, readonly ActivityStreamSample[]>();
   private readonly stageActivityResults = new Map<string, StageActivityResult>();
   private readonly stageMarkerCrossings = new Map<string, StageMarkerCrossing>();
+  private readonly stravaWebhookEvents: StravaWebhookEventInput[] = [];
   private readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
 
   constructor(private readonly fixtureData: ApiFixtureData) {}
@@ -266,5 +268,9 @@ export class FixtureRepository implements ApplicationRepository {
   async getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null> {
     const data = this.fixtureData.seasonArchetypes.data.filter((snapshot) => snapshot.seasonId === seasonId);
     return data.length > 0 ? { data } : null;
+  }
+
+  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void> {
+    this.stravaWebhookEvents.push(input);
   }
 }

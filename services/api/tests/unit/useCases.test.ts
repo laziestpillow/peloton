@@ -9,6 +9,7 @@ import {
   type StravaConnection,
   type StravaConnectionInput,
   type StravaConnectionUpdate,
+  type StravaWebhookEventInput,
   type StravaOAuthState
 } from "../../src/application/useCases.js";
 import type { ApiFixtureData } from "../../src/application/fixtureData.js";
@@ -129,6 +130,7 @@ class InMemoryRepository implements ApplicationRepository {
   readonly streamSamples = new Map<string, readonly ActivityStreamSample[]>();
   readonly stageActivityResults = new Map<string, StageActivityResult>();
   readonly stageMarkerCrossings = new Map<string, StageMarkerCrossing>();
+  readonly stravaWebhookEvents: StravaWebhookEventInput[] = [];
 
   async listActivities(userId: string): Promise<ActivityListResponse> {
     return {
@@ -341,6 +343,10 @@ class InMemoryRepository implements ApplicationRepository {
   async getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null> {
     return seasonId === "season-001" ? seasonArchetypes : null;
   }
+
+  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void> {
+    this.stravaWebhookEvents.push(input);
+  }
 }
 
 class FailingRefreshGateway extends MockStravaGateway {
@@ -351,6 +357,8 @@ class FailingRefreshGateway extends MockStravaGateway {
 
 class RecordingGateway implements StravaGateway {
   revokedToken: string | null = null;
+  createdWebhook: { callbackUrl: string; verifyToken: string } | null = null;
+  deletedWebhookSubscriptionId: number | null = null;
 
   async exchangeAuthorizationCode(): Promise<StravaTokenExchange> {
     throw new Error("not used");
@@ -378,6 +386,32 @@ class RecordingGateway implements StravaGateway {
   async revokeToken(input: { token: string }): Promise<void> {
     this.revokedToken = input.token;
   }
+
+  async createWebhookSubscription(input: { callbackUrl: string; verifyToken: string }): Promise<{ id: number }> {
+    this.createdWebhook = input;
+    return { id: 1 };
+  }
+
+  async listWebhookSubscriptions(): Promise<readonly [{
+    id: number;
+    applicationId: number;
+    callbackUrl: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }]> {
+    return [{
+      id: 1,
+      applicationId: 12345,
+      callbackUrl: "http://127.0.0.1:8080/v1/webhooks/strava",
+      createdAt: new Date("2026-07-31T10:00:00.000Z"),
+      updatedAt: new Date("2026-07-31T10:00:00.000Z")
+    }];
+  }
+
+  async deleteWebhookSubscription(input: { subscriptionId: number }): Promise<void> {
+    this.deletedWebhookSubscriptionId = input.subscriptionId;
+    return;
+  }
 }
 
 const tokenCipher = createTokenCipher("0000000000000000000000000000000000000000000000000000000000000000");
@@ -389,6 +423,8 @@ function createStravaServices(stravaGateway: StravaGateway = new MockStravaGatew
     stravaClientId: "12345",
     stravaClientSecret: "secret",
     stravaCallbackUrl: "http://127.0.0.1:8080/v1/auth/strava/callback",
+    stravaWebhookCallbackUrl: "http://127.0.0.1:8080/v1/webhooks/strava",
+    stravaWebhookVerifyToken: "dev-strava-webhook-token",
     appDeepLinkUrl: "peloton://strava/callback",
     stravaOAuthScope: "read,activity:read_all",
     stravaOAuthStateTtlSeconds: 600,
@@ -734,5 +770,43 @@ describe("application use cases", () => {
     expect(gateway.revokedToken).toBe("old-refresh");
     expect(repository.stravaConnections.get("user-001")).toMatchObject({ status: "revoked" });
     expect(tokenCipher.decrypt(repository.stravaConnections.get("user-001")?.encryptedRefreshToken ?? "")).toBe("revoked");
+  });
+
+  test("handles Strava webhook verification, event intake, and subscription lifecycle", async () => {
+    const repository = new InMemoryRepository();
+    const gateway = new RecordingGateway();
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    await expect(useCases.verifyStravaWebhook({
+      mode: "subscribe",
+      challenge: "challenge-123",
+      verifyToken: "dev-strava-webhook-token"
+    })).resolves.toEqual({ "hub.challenge": "challenge-123" });
+    await expect(useCases.verifyStravaWebhook({
+      mode: "subscribe",
+      challenge: "challenge-123",
+      verifyToken: "wrong"
+    })).rejects.toMatchObject({ statusCode: 403 });
+
+    await expect(useCases.receiveStravaWebhook({
+      object_type: "activity",
+      object_id: 1360128428,
+      aspect_type: "create",
+      owner_id: 134815,
+      subscription_id: 120475,
+      event_time: 1516126040
+    })).resolves.toEqual({ status: "accepted" });
+    expect(repository.stravaWebhookEvents[0]).toMatchObject({ action: "sync_requested" });
+
+    await expect(useCases.listStravaWebhookSubscriptions()).resolves.toMatchObject({
+      data: [{ id: 1, applicationId: 12345 }]
+    });
+    await expect(useCases.createStravaWebhookSubscription()).resolves.toEqual({ id: 1 });
+    expect(gateway.createdWebhook).toMatchObject({
+      callbackUrl: "http://127.0.0.1:8080/v1/webhooks/strava",
+      verifyToken: "dev-strava-webhook-token"
+    });
+    await useCases.deleteStravaWebhookSubscription(1);
+    expect(gateway.deletedWebhookSubscriptionId).toBe(1);
   });
 });

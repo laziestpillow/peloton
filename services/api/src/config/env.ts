@@ -22,6 +22,8 @@ const envSchema = z.object({
   STRAVA_CLIENT_ID: z.string().optional(),
   STRAVA_CLIENT_SECRET: z.string().optional(),
   STRAVA_CALLBACK_URL: z.string().url().default("http://127.0.0.1:8080/v1/auth/strava/callback"),
+  STRAVA_WEBHOOK_CALLBACK_URL: z.string().url().default("http://127.0.0.1:8080/v1/webhooks/strava"),
+  STRAVA_WEBHOOK_VERIFY_TOKEN: z.string().default(""),
   STRAVA_OAUTH_SCOPE: z.string().default("read,activity:read_all"),
   STRAVA_OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
   STRAVA_TOKEN_ENCRYPTION_KEY: z.string().default("0000000000000000000000000000000000000000000000000000000000000000"),
@@ -32,7 +34,7 @@ const envSchema = z.object({
     return;
   }
 
-  for (const key of ["STRAVA_CLIENT_ID", "STRAVA_CLIENT_SECRET"] as const) {
+  for (const key of ["STRAVA_CLIENT_ID", "STRAVA_CLIENT_SECRET", "STRAVA_WEBHOOK_VERIFY_TOKEN"] as const) {
     if (!value[key]) {
       context.addIssue({
         code: "custom",
