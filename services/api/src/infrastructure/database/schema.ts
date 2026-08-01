@@ -2,6 +2,8 @@ import { integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, 
 
 export const appearancePattern = pgEnum("appearance_pattern", ["solid", "stripes", "polkaDots"]);
 export const connectionStatus = pgEnum("connection_status", ["connected", "expired", "error", "revoked"]);
+export const markerType = pgEnum("marker_type", ["sprint", "climb"]);
+export const stageStatus = pgEnum("stage_status", ["scheduled", "active", "completed"]);
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -37,6 +39,47 @@ export const groupMemberships = pgTable("group_memberships", {
   status: text("status").notNull(),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull()
 }, (table) => [primaryKey({ columns: [table.groupId, table.riderId] })]);
+
+export const seasons = pgTable("seasons", {
+  id: text("id").primaryKey(),
+  groupId: text("group_id").notNull().references(() => groups.id),
+  name: text("name").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+});
+
+export const stages = pgTable("stages", {
+  id: text("id").primaryKey(),
+  seasonId: text("season_id").notNull().references(() => seasons.id),
+  name: text("name").notNull(),
+  distanceMeters: numeric("distance_meters", { mode: "number" }).notNull(),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+  status: stageStatus("status").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+});
+
+export const stageRoutePoints = pgTable("stage_route_points", {
+  stageId: text("stage_id").notNull().references(() => stages.id),
+  positionMeters: numeric("position_meters", { mode: "number" }).notNull(),
+  altitudeMeters: numeric("altitude_meters", { mode: "number" }).notNull(),
+  sequence: integer("sequence").notNull()
+}, (table) => [primaryKey({ columns: [table.stageId, table.sequence] })]);
+
+export const stageMarkers = pgTable("stage_markers", {
+  id: text("id").primaryKey(),
+  stageId: text("stage_id").notNull().references(() => stages.id),
+  type: markerType("type").notNull(),
+  positionMeters: numeric("position_meters", { mode: "number" }).notNull(),
+  latitude: numeric("latitude", { mode: "number" }).notNull(),
+  longitude: numeric("longitude", { mode: "number" }).notNull(),
+  geofenceRadiusMeters: numeric("geofence_radius_meters", { mode: "number" }).notNull(),
+  category: integer("category"),
+  pointsSchedule: jsonb("points_schedule").notNull(),
+  sequence: integer("sequence").notNull()
+});
 
 export const importedActivities = pgTable("imported_activities", {
   id: text("id").primaryKey(),

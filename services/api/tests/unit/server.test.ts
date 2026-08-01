@@ -4,6 +4,7 @@ import type { AppConfig } from "../../src/config/env.js";
 import { loadApiFixtureData } from "../../src/application/fixtureData.js";
 import { FixtureRepository } from "../../src/infrastructure/repositories/FixtureRepository.js";
 import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
+import { sensitiveLogRedactionPaths } from "../../src/http/server.js";
 
 const config: AppConfig = {
   NODE_ENV: "test",
@@ -23,12 +24,23 @@ const config: AppConfig = {
   STRAVA_OAUTH_SCOPE: "read,activity:read_all",
   STRAVA_OAUTH_STATE_TTL_SECONDS: 600,
   STRAVA_TOKEN_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000",
-  APP_DEEP_LINK_URL: "peloton://strava/callback"
+  APP_DEEP_LINK_URL: "peloton://strava/callback",
+  ALLOW_LIVE_DATABASE_TASKS: false
 };
 
 const userOneAuth = { authorization: "Bearer dev-token-user-001" };
 const userTwoAuth = { authorization: "Bearer dev-token-user-002" };
 const userThreeAuth = { authorization: "Bearer dev-token-user-003" };
+
+function expectErrorResponse(response: { json(): unknown }, code: string, message: string, requestId?: string) {
+  expect(response.json()).toEqual({
+    error: {
+      code,
+      message,
+      requestId: requestId ?? expect.any(String)
+    }
+  });
+}
 
 describe("server repository-backed routes", () => {
   test("serves current rider and activities through injected repository", async () => {
@@ -55,15 +67,15 @@ describe("server repository-backed routes", () => {
     try {
       const missing = await app.inject({ method: "GET", url: "/v1/riders/me" });
       expect(missing.statusCode).toBe(401);
-      expect(missing.json()).toEqual({ error: { code: "unauthorized", message: "Missing bearer token." } });
+      expectErrorResponse(missing, "unauthorized", "Missing bearer token.");
 
       const malformed = await app.inject({ method: "GET", url: "/v1/riders/me", headers: { authorization: "Basic no" } });
       expect(malformed.statusCode).toBe(401);
-      expect(malformed.json()).toEqual({ error: { code: "unauthorized", message: "Malformed bearer token." } });
+      expectErrorResponse(malformed, "unauthorized", "Malformed bearer token.");
 
       const invalid = await app.inject({ method: "GET", url: "/v1/riders/me", headers: { authorization: "Bearer nope" } });
       expect(invalid.statusCode).toBe(401);
-      expect(invalid.json()).toEqual({ error: { code: "unauthorized", message: "Invalid bearer token." } });
+      expectErrorResponse(invalid, "unauthorized", "Invalid bearer token.");
     } finally {
       await app.close();
     }
@@ -79,7 +91,7 @@ describe("server repository-backed routes", () => {
 
       const second = await app.inject({ method: "GET", url: "/v1/riders/me" });
       expect(second.statusCode).toBe(429);
-      expect(second.json()).toEqual({ error: { code: "rate_limited", message: "Too many authentication attempts." } });
+      expectErrorResponse(second, "rate_limited", "Too many authentication attempts.");
     } finally {
       await app.close();
     }
@@ -128,7 +140,7 @@ describe("server repository-backed routes", () => {
       const connectedStatus = await app.inject({ method: "GET", url: "/v1/integrations/strava/status", headers: userOneAuth });
       expect(connectedStatus.statusCode).toBe(200);
       expect(connectedStatus.json()).toMatchObject({
-        status: "connected",
+        status: "expired",
         acceptedScopes: ["read", "activity:read_all"],
         lastSyncedAt: null
       });
@@ -181,7 +193,7 @@ describe("server repository-backed routes", () => {
 
       const second = await app.inject({ method: "GET", url: `/v1/auth/strava/callback?code=second&state=${state}` });
       expect(second.statusCode).toBe(400);
-      expect(second.json()).toEqual({ error: { code: "bad_request", message: "Strava authorization state was already used." } });
+      expectErrorResponse(second, "bad_request", "Strava authorization state was already used.");
     } finally {
       await app.close();
     }
@@ -236,5 +248,85 @@ describe("server repository-backed routes", () => {
     } finally {
       await app.close();
     }
+  });
+
+  test("serves group stage list and stage detail through repository-backed use cases", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository });
+
+    try {
+      const list = await app.inject({ method: "GET", url: "/v1/groups/group-001/stages", headers: userOneAuth });
+      expect(list.statusCode).toBe(200);
+      expect(list.json()).toMatchObject({
+        data: [
+          {
+            id: "stage-001",
+            orderedMarkers: [
+              { id: "marker-sprint-001", pointsSchedule: [20, 17, 15, 13, 11] },
+              { id: "marker-climb-001", pointsSchedule: [10, 8, 6, 4, 2] }
+            ]
+          }
+        ]
+      });
+
+      const detail = await app.inject({ method: "GET", url: "/v1/stages/stage-001", headers: userTwoAuth });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json()).toMatchObject({ id: "stage-001", route: { distanceMeters: 42195 } });
+
+      const missing = await app.inject({ method: "GET", url: "/v1/stages/missing", headers: userOneAuth });
+      expect(missing.statusCode).toBe(404);
+
+      const forbidden = await app.inject({ method: "GET", url: "/v1/groups/group-001/stages", headers: userThreeAuth });
+      expect(forbidden.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("echoes incoming request IDs on errors and response headers", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/activities/missing",
+        headers: { ...userOneAuth, "x-request-id": "issue-25-request-id" }
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.headers["x-request-id"]).toBe("issue-25-request-id");
+      expectErrorResponse(response, "not_found", "Activity not found.", "issue-25-request-id");
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("normalizes unknown route errors with request IDs", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository });
+
+    try {
+      const response = await app.inject({ method: "GET", url: "/v1/nope", headers: userOneAuth });
+      expect(response.statusCode).toBe(404);
+      expectErrorResponse(response, "not_found", "Route not found.");
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("redacts known sensitive fields from request logs", () => {
+    expect(sensitiveLogRedactionPaths).toEqual(expect.arrayContaining([
+      "req.headers.authorization",
+      "req.query.code",
+      "req.query.state",
+      "accessToken",
+      "refreshToken",
+      "encryptedAccessToken",
+      "encryptedRefreshToken",
+      "STRAVA_CLIENT_SECRET",
+      "STRAVA_TOKEN_ENCRYPTION_KEY",
+      "DATABASE_URL"
+    ]));
   });
 });

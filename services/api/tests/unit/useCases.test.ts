@@ -16,7 +16,8 @@ import type {
   GroupMembership,
   ImportedActivity,
   RiderAppearance,
-  RiderProfile
+  RiderProfile,
+  Stage
 } from "../../src/domain/models.js";
 import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
 import type { StravaGateway, StravaTokenExchange } from "../../src/infrastructure/strava/StravaGateway.js";
@@ -59,8 +60,36 @@ const activity: ImportedActivity = {
   processedStageId: "stage-001"
 };
 
+const stage: Stage = {
+  id: "stage-001",
+  seasonId: "season-001",
+  name: "Barcelona Hills",
+  route: {
+    distanceMeters: 42195,
+    elevation: [
+      { positionMeters: 0, altitudeMeters: 35 },
+      { positionMeters: 42195, altitudeMeters: 88 }
+    ]
+  },
+  orderedMarkers: [
+    {
+      id: "marker-sprint-001",
+      type: "sprint",
+      positionMeters: 12000,
+      latitude: 41.39,
+      longitude: 2.16,
+      geofenceRadiusMeters: 25,
+      category: null,
+      pointsSchedule: [20, 17, 15, 13, 11]
+    }
+  ],
+  scheduledAt: "2026-07-18T07:30:00.000Z",
+  status: "completed"
+};
+
 const fixtureData: ApiFixtureData = {
   activities: { data: [activity], pagination: { nextCursor: null } },
+  stages: { data: [stage] },
   recap: { riders: [rider] },
   stageResults: {},
   seasonStandings: {}
@@ -137,6 +166,18 @@ class InMemoryRepository implements ApplicationRepository {
       status: "active",
       joinedAt: "2026-07-31T10:00:00.000Z"
     };
+  }
+
+  async listGroupStages(groupId: string): Promise<{ data: readonly Stage[] }> {
+    return groupId === "group-001" ? { data: [stage] } : { data: [] };
+  }
+
+  async getStage(stageId: string): Promise<Stage | null> {
+    return stageId === stage.id ? stage : null;
+  }
+
+  async getStageGroupId(stageId: string): Promise<string | null> {
+    return stageId === stage.id ? "group-001" : null;
   }
 
   async createStravaOAuthState(input: StravaOAuthState): Promise<void> {
@@ -312,6 +353,20 @@ describe("application use cases", () => {
 
     await expect(useCases.getGroup("group-001")).resolves.toMatchObject({ id: "group-001" });
     await expect(useCases.addGroupMember({ groupId: "group-001", riderId: "rider-001" })).rejects.toMatchObject({
+      statusCode: 403,
+      code: "forbidden"
+    });
+  });
+
+  test("reads stages after checking group access", async () => {
+    const ownerUseCases = createApplicationUseCases(new InMemoryRepository(), "user-001", fixtureData);
+    const memberUseCases = createApplicationUseCases(new InMemoryRepository(), "user-002", fixtureData);
+    const outsiderUseCases = createApplicationUseCases(new InMemoryRepository(), "user-003", fixtureData);
+
+    await expect(ownerUseCases.listGroupStages("group-001")).resolves.toEqual({ data: [stage] });
+    await expect(memberUseCases.getStage("stage-001")).resolves.toEqual(stage);
+    await expect(ownerUseCases.getStage("missing")).resolves.toBeNull();
+    await expect(outsiderUseCases.listGroupStages("group-001")).rejects.toMatchObject({
       statusCode: 403,
       code: "forbidden"
     });

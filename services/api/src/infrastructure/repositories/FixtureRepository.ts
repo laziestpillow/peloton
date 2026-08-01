@@ -15,7 +15,8 @@ import type {
   GroupMembership,
   ImportedActivity,
   RiderAppearance,
-  RiderProfile
+  RiderProfile,
+  Stage
 } from "../../domain/models.js";
 
 export class FixtureRepository implements ApplicationRepository {
@@ -97,6 +98,21 @@ export class FixtureRepository implements ApplicationRepository {
       status: "active",
       joinedAt: new Date().toISOString()
     };
+  }
+
+  async listGroupStages(groupId: string): Promise<{ data: readonly Stage[] }> {
+    if (groupId !== "group-001") {
+      return { data: [] };
+    }
+    return this.fixtureData.stages;
+  }
+
+  async getStage(stageId: string): Promise<Stage | null> {
+    return this.fixtureData.stages.data.find((stage) => stage.id === stageId) ?? null;
+  }
+
+  async getStageGroupId(stageId: string): Promise<string | null> {
+    return this.fixtureData.stages.data.some((stage) => stage.id === stageId) ? "group-001" : null;
   }
 
   async createStravaOAuthState(input: StravaOAuthState): Promise<void> {

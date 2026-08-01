@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+const envBoolean = z.preprocess((value) => {
+  if (typeof value === "string") {
+    return value.toLowerCase() === "true";
+  }
+  return value;
+}, z.boolean());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["test", "development", "staging", "production"]).default("development"),
   DATA_SOURCE: z.enum(["fixture", "postgres"]).default("postgres"),
@@ -18,7 +25,8 @@ const envSchema = z.object({
   STRAVA_OAUTH_SCOPE: z.string().default("read,activity:read_all"),
   STRAVA_OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
   STRAVA_TOKEN_ENCRYPTION_KEY: z.string().default("0000000000000000000000000000000000000000000000000000000000000000"),
-  APP_DEEP_LINK_URL: z.string().default("peloton://strava/callback")
+  APP_DEEP_LINK_URL: z.string().default("peloton://strava/callback"),
+  ALLOW_LIVE_DATABASE_TASKS: envBoolean.default(false)
 }).superRefine((value, context) => {
   if (value.NODE_ENV !== "production" && value.NODE_ENV !== "staging") {
     return;
@@ -47,4 +55,14 @@ export type AppConfig = z.infer<typeof envSchema>;
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   return envSchema.parse(source);
+}
+
+export function assertSafeDatabaseTask(config: AppConfig, taskName: "migration" | "seed"): void {
+  if (config.NODE_ENV === "production" && !config.ALLOW_LIVE_DATABASE_TASKS) {
+    throw new Error(`Refusing to run ${taskName} against production without ALLOW_LIVE_DATABASE_TASKS=true.`);
+  }
+
+  if (taskName === "seed" && config.NODE_ENV !== "development" && config.NODE_ENV !== "test" && !config.ALLOW_LIVE_DATABASE_TASKS) {
+    throw new Error(`Refusing to seed ${config.NODE_ENV} without ALLOW_LIVE_DATABASE_TASKS=true.`);
+  }
 }

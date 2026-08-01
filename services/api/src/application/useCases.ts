@@ -6,7 +6,8 @@ import type {
   GroupMembership,
   ImportedActivity,
   RiderAppearance,
-  RiderProfile
+  RiderProfile,
+  Stage
 } from "../domain/models.js";
 import type { StravaGateway } from "../infrastructure/strava/StravaGateway.js";
 import type { TokenCipher } from "../infrastructure/strava/TokenCipher.js";
@@ -86,6 +87,9 @@ export interface ApplicationRepository {
   getGroup(groupId: string): Promise<Group | null>;
   getGroupMembershipForUser(input: { groupId: string; userId: string }): Promise<GroupMembership | null>;
   addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership>;
+  listGroupStages(groupId: string): Promise<{ data: readonly Stage[] }>;
+  getStage(stageId: string): Promise<Stage | null>;
+  getStageGroupId(stageId: string): Promise<string | null>;
   createStravaOAuthState(input: StravaOAuthState): Promise<void>;
   getStravaOAuthState(state: string): Promise<StravaOAuthState | null>;
   consumeStravaOAuthState(input: { state: string; consumedAt: Date }): Promise<void>;
@@ -105,6 +109,8 @@ export interface ApplicationUseCases {
   createGroup(input: { name?: string }): Promise<Group>;
   getGroup(groupId: string): Promise<Group | null>;
   addGroupMember(input: { groupId: string; riderId: string }): Promise<GroupMembership>;
+  listGroupStages(groupId: string): Promise<{ data: readonly Stage[] }>;
+  getStage(stageId: string): Promise<Stage | null>;
   startStravaAuthorization(): Promise<{ authorizationUrl: string; stateExpiresAt: string }>;
   completeStravaAuthorization(input: { code?: string; state: string; scope?: string; error?: string }): Promise<{ redirectUrl: string }>;
   getStravaStatus(): Promise<StravaIntegrationStatus>;
@@ -264,6 +270,18 @@ export function createApplicationUseCases(
         throw new ApplicationError(403, "forbidden", "Only the group owner can add members.");
       }
       return repository.addGroupMember(input);
+    },
+    async listGroupStages(groupId) {
+      await requireGroupAccess(groupId);
+      return repository.listGroupStages(groupId);
+    },
+    async getStage(stageId) {
+      const groupId = await repository.getStageGroupId(stageId);
+      if (!groupId) {
+        return null;
+      }
+      await requireGroupAccess(groupId);
+      return repository.getStage(stageId);
     },
     async startStravaAuthorization() {
       const strava = requireStravaServices();

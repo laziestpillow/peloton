@@ -14,10 +14,36 @@ import { PostgresRepository } from "../infrastructure/repositories/PostgresRepos
 import { HttpStravaGateway, type StravaGateway } from "../infrastructure/strava/StravaGateway.js";
 import { createTokenCipher } from "../infrastructure/strava/TokenCipher.js";
 import { createSessionPreHandler } from "./auth.js";
+import { registerErrorHandlers, sendErrorResponse, type ErrorCode } from "./errors.js";
 
 export interface ServerOptions {
   repository?: ApplicationRepository;
   stravaGateway?: StravaGateway;
+}
+
+export const sensitiveLogRedactionPaths = [
+  "req.headers.authorization",
+  "req.query.code",
+  "req.query.state",
+  "req.query.error",
+  "strava.accessToken",
+  "strava.refreshToken",
+  "accessToken",
+  "refreshToken",
+  "encryptedAccessToken",
+  "encryptedRefreshToken",
+  "clientSecret",
+  "stravaClientSecret",
+  "STRAVA_CLIENT_SECRET",
+  "STRAVA_TOKEN_ENCRYPTION_KEY",
+  "DATABASE_URL"
+] as const;
+
+export function createLoggerOptions(level: AppConfig["LOG_LEVEL"]) {
+  return {
+    level,
+    redact: [...sensitiveLogRedactionPaths]
+  };
 }
 
 function createRepository(config: AppConfig, fixtureData: ApiFixtureData): { repository: ApplicationRepository; connection?: DatabaseConnection } {
@@ -34,18 +60,8 @@ function createRepository(config: AppConfig, fixtureData: ApiFixtureData): { rep
 
 export async function buildServer(config: AppConfig, options: ServerOptions = {}) {
   const app = Fastify({
-    logger: {
-      level: config.LOG_LEVEL,
-      redact: [
-        "req.headers.authorization",
-        "req.query.code",
-        "strava.accessToken",
-        "strava.refreshToken",
-        "accessToken",
-        "refreshToken",
-        "clientSecret"
-      ]
-    }
+    logger: createLoggerOptions(config.LOG_LEVEL),
+    requestIdHeader: "x-request-id"
   });
   const fixtureData = await loadApiFixtureData();
   const liveRepository = options.repository ? { repository: options.repository } : createRepository(config, fixtureData);
@@ -71,10 +87,14 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   const openApiText = await readFile(resolve(process.cwd(), "../../contracts/openapi.yaml"), "utf8");
   await app.register(swagger, { mode: "static", specification: { document: YAML.parse(openApiText) } });
   await app.register(swaggerUi, { routePrefix: "/docs" });
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("x-request-id", request.id);
+  });
   app.addHook("preHandler", createSessionPreHandler(config));
+  registerErrorHandlers(app);
 
-  function sendError(reply: FastifyReply, statusCode: 400 | 401 | 403 | 404, code: string, message: string) {
-    return reply.status(statusCode).send({ error: { code, message } });
+  function sendError(request: FastifyRequest, reply: FastifyReply, statusCode: number, code: ErrorCode, message: string) {
+    return sendErrorResponse(reply, request, statusCode, code, message);
   }
 
   function getUseCases(request: FastifyRequest): ApplicationUseCases {
@@ -82,9 +102,9 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     return createUseCasesForUser(userId);
   }
 
-  async function handleApplicationError(error: unknown, reply: FastifyReply): Promise<unknown> {
+  async function handleApplicationError(error: unknown, request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
     if (error instanceof ApplicationError) {
-      return sendError(reply, error.statusCode, error.code, error.message);
+      return sendErrorResponse(reply, request, error.statusCode, error.code, error.message);
     }
     throw error;
   }
@@ -98,7 +118,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
 
   app.get<{ Querystring: { code?: string; state?: string; scope?: string; error?: string } }>("/v1/auth/strava/callback", async (request, reply) => {
     if (!request.query.state) {
-      return sendError(reply, 400, "bad_request", "Missing Strava authorization state.");
+      return sendError(request, reply, 400, "bad_request", "Missing Strava authorization state.");
     }
     const useCases = createUseCasesForUser(config.CURRENT_USER_ID);
     try {
@@ -110,7 +130,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
       });
       return reply.redirect(result.redirectUrl);
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
 
@@ -132,7 +152,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     try {
       return reply.status(202).send(await useCases.syncActivities(idempotencyKey ? { idempotencyKey } : undefined));
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
 
@@ -145,11 +165,11 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     try {
       const activity = await useCases.getActivity(request.params.activityId);
       if (!activity) {
-        return sendError(reply, 404, "not_found", "Activity not found.");
+        return sendError(request, reply, 404, "not_found", "Activity not found.");
       }
       return activity;
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
 
@@ -158,7 +178,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     try {
       return await useCases.getCurrentRider();
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
   app.patch<{ Body: RiderAppearance }>("/v1/riders/me/appearance", async (request, reply) => {
@@ -166,7 +186,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     try {
       return await useCases.updateCurrentRiderAppearance(request.body);
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
 
@@ -181,7 +201,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     try {
       return await useCases.getGroup(request.params.groupId);
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
 
@@ -193,43 +213,30 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
         riderId: request.body.riderId
       }));
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
 
   app.get<{ Params: { groupId: string } }>("/v1/groups/:groupId/stages", async (request, reply) => {
     const useCases = getUseCases(request);
     try {
-      await useCases.getGroup(request.params.groupId);
-      return {
-        data: [
-          {
-            id: "stage-001",
-            seasonId: "season-001",
-            name: "Barcelona Hills",
-            route: { distanceMeters: 42195, elevation: [{ positionMeters: 0, altitudeMeters: 35 }, { positionMeters: 42195, altitudeMeters: 88 }] },
-            orderedMarkers: [],
-            scheduledAt: "2026-07-18T07:30:00Z",
-            status: "completed"
-          }
-        ]
-      };
+      return await useCases.listGroupStages(request.params.groupId);
     } catch (error) {
-      return handleApplicationError(error, reply);
+      return handleApplicationError(error, request, reply);
     }
   });
 
-  app.get("/v1/stages/:stageId", async (request) => {
-    getUseCases(request);
-    return {
-      id: "stage-001",
-      seasonId: "season-001",
-      name: "Barcelona Hills",
-      route: { distanceMeters: 42195, elevation: [{ positionMeters: 0, altitudeMeters: 35 }, { positionMeters: 42195, altitudeMeters: 88 }] },
-      orderedMarkers: [],
-      scheduledAt: "2026-07-18T07:30:00Z",
-      status: "completed"
-    };
+  app.get<{ Params: { stageId: string } }>("/v1/stages/:stageId", async (request, reply) => {
+    const useCases = getUseCases(request);
+    try {
+      const stage = await useCases.getStage(request.params.stageId);
+      if (!stage) {
+        return sendError(request, reply, 404, "not_found", "Stage not found.");
+      }
+      return stage;
+    } catch (error) {
+      return handleApplicationError(error, request, reply);
+    }
   });
   app.get("/v1/stages/:stageId/recap", async (request) => {
     const useCases = getUseCases(request);
