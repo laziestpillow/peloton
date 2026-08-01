@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { ApiFixtureData } from "./fixtureData.js";
 import type {
   ActivityListResponse,
+  ActivityStreamSample,
   Group,
   GroupMembership,
   ImportedActivity,
@@ -9,6 +10,7 @@ import type {
   RiderProfile,
   Stage
 } from "../domain/models.js";
+import { normalizeActivityStreams } from "../domain/streamNormalization.js";
 import type { StravaGateway } from "../infrastructure/strava/StravaGateway.js";
 import type { TokenCipher } from "../infrastructure/strava/TokenCipher.js";
 
@@ -66,6 +68,11 @@ export interface ImportedActivityInput {
   processedStageId: string | null;
 }
 
+export interface ActivityStreamSamplesInput {
+  activityId: string;
+  samples: readonly ActivityStreamSample[];
+}
+
 export interface ApplicationServices {
   stravaGateway: StravaGateway;
   tokenCipher: TokenCipher;
@@ -99,6 +106,7 @@ export interface ApplicationRepository {
   beginActivitySync(input: { userId: string; idempotencyKey: string | null; requestedAt: Date }): Promise<ActivitySyncStart>;
   completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void>;
   upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
+  replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void>;
 }
 
 export interface ApplicationUseCases {
@@ -404,12 +412,29 @@ export function createApplicationUseCases(
           throw new ApplicationError(400, "bad_request", "Strava is not connected.");
         }
 
-        const activities = await strava.stravaGateway.listRecentActivities({
-          accessToken: strava.tokenCipher.decrypt(connection.encryptedAccessToken)
-        });
+        const accessToken = strava.tokenCipher.decrypt(connection.encryptedAccessToken);
+        const activities = await strava.stravaGateway.listRecentActivities({ accessToken });
         for (const activity of activities) {
           const supported = isSupportedRide(activity.sportType);
-          await repository.upsertImportedActivity({
+          let routeSummary = emptyRouteSummary(activity.polyline);
+          let importStatus: ImportedActivity["importStatus"] = supported ? "eligible" : "unsupported";
+          let samples: readonly ActivityStreamSample[] = [];
+
+          if (supported) {
+            try {
+              const streams = await strava.stravaGateway.getActivityStreams({
+                accessToken,
+                providerActivityId: activity.providerActivityId
+              });
+              const normalized = normalizeActivityStreams(streams, activity.polyline);
+              routeSummary = normalized.routeSummary;
+              samples = normalized.samples;
+            } catch {
+              importStatus = "failed";
+            }
+          }
+
+          const imported = await repository.upsertImportedActivity({
             riderId: rider.id,
             provider: "strava",
             providerActivityId: activity.providerActivityId,
@@ -419,10 +444,13 @@ export function createApplicationUseCases(
             elapsedTimeSeconds: activity.elapsedTimeSeconds,
             movingTimeSeconds: activity.movingTimeSeconds,
             elevationGainMeters: activity.elevationGainMeters,
-            routeSummary: emptyRouteSummary(activity.polyline),
-            importStatus: supported ? "eligible" : "unsupported",
+            routeSummary,
+            importStatus,
             processedStageId: null
           });
+          if (!imported.duplicate && samples.length > 0) {
+            await repository.replaceActivityStreamSamples({ activityId: imported.activity.id, samples });
+          }
         }
 
         const completedAt = now();

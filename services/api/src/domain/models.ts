@@ -42,6 +42,16 @@ export interface ImportedActivity {
   processedStageId: string | null;
 }
 
+export interface ActivityStreamSample {
+  sequence: number;
+  timeSeconds: number;
+  distanceMeters: number;
+  latitude: number | null;
+  longitude: number | null;
+  altitudeMeters: number | null;
+  velocityMetersPerSecond: number | null;
+}
+
 export interface ActivityListResponse {
   data: readonly ImportedActivity[];
   pagination: { nextCursor: string | null };

@@ -3,6 +3,7 @@ import type { ApiFixtureData } from "../../application/fixtureData.js";
 import type {
   ActivitySyncStart,
   ApplicationRepository,
+  ActivityStreamSamplesInput,
   ImportedActivityInput,
   StravaConnection,
   StravaConnectionInput,
@@ -11,6 +12,7 @@ import type {
 } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
+  ActivityStreamSample,
   Group,
   GroupMembership,
   ImportedActivity,
@@ -23,6 +25,7 @@ export class FixtureRepository implements ApplicationRepository {
   private readonly stravaOAuthStates = new Map<string, StravaOAuthState>();
   private readonly stravaConnections = new Map<string, StravaConnection>();
   private readonly stravaActivities = new Map<string, ImportedActivity>();
+  private readonly streamSamples = new Map<string, readonly ActivityStreamSample[]>();
   private readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
 
   constructor(private readonly fixtureData: ApiFixtureData) {}
@@ -204,5 +207,9 @@ export class FixtureRepository implements ApplicationRepository {
     };
     this.stravaActivities.set(providerKey, activity);
     return { activity, duplicate: false };
+  }
+
+  async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
+    this.streamSamples.set(input.activityId, input.samples);
   }
 }
