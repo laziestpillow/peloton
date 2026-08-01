@@ -20,6 +20,7 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
+  SeasonArchetypesResponse,
   SeasonStandingsResponse,
   Stage,
   StageActivityResult,
@@ -106,12 +107,17 @@ const seasonStandings: SeasonStandingsResponse = {
   standings: []
 };
 
+const seasonArchetypes: SeasonArchetypesResponse = {
+  data: []
+};
+
 const fixtureData: ApiFixtureData = {
   activities: { data: [activity], pagination: { nextCursor: null } },
   stages: { data: [stage] },
   recap: { riders: [rider] },
   stageResults,
-  seasonStandings
+  seasonStandings,
+  seasonArchetypes
 };
 
 class InMemoryRepository implements ApplicationRepository {
@@ -330,6 +336,10 @@ class InMemoryRepository implements ApplicationRepository {
 
   async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {
     return seasonId === seasonStandings.seasonId ? seasonStandings : null;
+  }
+
+  async getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null> {
+    return seasonId === "season-001" ? seasonArchetypes : null;
   }
 }
 

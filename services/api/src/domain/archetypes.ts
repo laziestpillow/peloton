@@ -1,4 +1,4 @@
-import type { Archetype, ArchetypeInput, ArchetypeResult } from "./models.js";
+import type { Archetype, ArchetypeInput, ArchetypeResult, ArchetypeSnapshot, StageScore } from "./models.js";
 
 const minimumEstablishedSampleSize = 3;
 
@@ -69,3 +69,68 @@ export function classifyArchetype(input: ArchetypeInput): ArchetypeResult {
   };
 }
 
+function relativeScore(value: number, maxValue: number): number {
+  if (maxValue <= 0) {
+    return 0;
+  }
+  return Number(Math.min(1, value / maxValue).toFixed(2));
+}
+
+function sustainedScore(gcTimeSeconds: number, bestGcTimeSeconds: number): number {
+  if (gcTimeSeconds <= 0 || bestGcTimeSeconds <= 0) {
+    return 0;
+  }
+  return Number(Math.min(1, bestGcTimeSeconds / gcTimeSeconds).toFixed(2));
+}
+
+export function materializeArchetypeSnapshots(
+  seasonId: string,
+  stageScores: readonly StageScore[],
+  effectiveAt: Date,
+  previousSnapshots: readonly Pick<ArchetypeSnapshot, "riderId" | "archetype">[] = []
+): readonly ArchetypeSnapshot[] {
+  const scoresByRider = Map.groupBy(stageScores, (score) => score.riderId);
+  const aggregates = [...scoresByRider.entries()].map(([riderId, scores]) => ({
+    riderId,
+    sampleSize: scores.length,
+    sprintPoints: scores.reduce((total, score) => total + score.sprintPoints, 0),
+    climbPoints: scores.reduce((total, score) => total + score.komPoints, 0),
+    finishBonus: scores.reduce((total, score) => total + score.finishBonus, 0),
+    gcTimeSeconds: scores.reduce((total, score) => total + score.gcTimeSeconds, 0)
+  }));
+
+  const maxSprintPoints = Math.max(0, ...aggregates.map((aggregate) => aggregate.sprintPoints));
+  const maxClimbPoints = Math.max(0, ...aggregates.map((aggregate) => aggregate.climbPoints));
+  const maxFinishBonus = Math.max(0, ...aggregates.map((aggregate) => aggregate.finishBonus));
+  const bestGcTimeSeconds = Math.min(...aggregates.map((aggregate) => aggregate.gcTimeSeconds).filter((value) => value > 0));
+  const previousByRider = new Map(previousSnapshots.map((snapshot) => [snapshot.riderId, snapshot.archetype]));
+
+  return aggregates
+    .map((aggregate) => {
+      const previousArchetype = previousByRider.get(aggregate.riderId);
+      const input: ArchetypeInput = {
+        riderId: aggregate.riderId,
+        sampleSize: aggregate.sampleSize,
+        sprintRelativeScore: relativeScore(aggregate.sprintPoints, maxSprintPoints),
+        climbRelativeScore: relativeScore(aggregate.climbPoints, maxClimbPoints),
+        shortEffortScore: relativeScore(aggregate.finishBonus, maxFinishBonus),
+        sustainedEffortScore: sustainedScore(aggregate.gcTimeSeconds, Number.isFinite(bestGcTimeSeconds) ? bestGcTimeSeconds : 0),
+        ...(previousArchetype ? { previousArchetype } : {})
+      };
+      const result = classifyArchetype(input);
+      return {
+        seasonId,
+        riderId: aggregate.riderId,
+        archetype: result.archetype,
+        confidence: result.confidence,
+        sampleSize: input.sampleSize,
+        sprintRelativeScore: input.sprintRelativeScore,
+        climbRelativeScore: input.climbRelativeScore,
+        shortEffortScore: input.shortEffortScore,
+        sustainedEffortScore: input.sustainedEffortScore,
+        effectiveAt: effectiveAt.toISOString(),
+        reasons: result.reasons
+      };
+    })
+    .toSorted((left, right) => left.riderId.localeCompare(right.riderId));
+}

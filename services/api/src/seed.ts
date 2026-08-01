@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { assertSafeDatabaseTask, loadConfig } from "./config/env.js";
 import { readFixture } from "./application/fixtureData.js";
 import { runMigrations } from "./infrastructure/database/migrate.js";
-import type { ActivityListResponse, RiderProfile, SeasonStandingsResponse, Stage, StageResultsResponse } from "./domain/models.js";
+import type { ActivityListResponse, RiderProfile, SeasonArchetypesResponse, SeasonStandingsResponse, Stage, StageResultsResponse } from "./domain/models.js";
 
 interface RecapFixture {
   riders: readonly RiderProfile[];
@@ -15,6 +15,7 @@ async function seedDatabase(databaseUrl: string): Promise<void> {
   const stages = await readFixture<{ data: readonly Stage[] }>("stages.json");
   const stageResults = await readFixture<StageResultsResponse>("stage-results.json");
   const seasonStandings = await readFixture<SeasonStandingsResponse>("season-standings.json");
+  const seasonArchetypes = await readFixture<SeasonArchetypesResponse>("archetypes.json");
   const now = new Date("2026-07-01T10:00:00Z");
 
   try {
@@ -279,6 +280,41 @@ async function seedDatabase(databaseUrl: string): Promise<void> {
             previous_rank = EXCLUDED.previous_rank
         `,
         [standing.seasonId, standing.riderId, standing.seasonTotal, standing.rank, standing.previousRank]
+      );
+    }
+
+    for (const snapshot of seasonArchetypes.data) {
+      await pool.query(
+        `
+          INSERT INTO archetype_snapshots (
+            season_id, rider_id, archetype, confidence, sample_size, sprint_relative_score, climb_relative_score,
+            short_effort_score, sustained_effort_score, effective_at, reasons
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+          ON CONFLICT (season_id, rider_id) DO UPDATE SET
+            archetype = EXCLUDED.archetype,
+            confidence = EXCLUDED.confidence,
+            sample_size = EXCLUDED.sample_size,
+            sprint_relative_score = EXCLUDED.sprint_relative_score,
+            climb_relative_score = EXCLUDED.climb_relative_score,
+            short_effort_score = EXCLUDED.short_effort_score,
+            sustained_effort_score = EXCLUDED.sustained_effort_score,
+            effective_at = EXCLUDED.effective_at,
+            reasons = EXCLUDED.reasons
+        `,
+        [
+          snapshot.seasonId,
+          snapshot.riderId,
+          snapshot.archetype,
+          snapshot.confidence,
+          snapshot.sampleSize,
+          snapshot.sprintRelativeScore,
+          snapshot.climbRelativeScore,
+          snapshot.shortEffortScore,
+          snapshot.sustainedEffortScore,
+          snapshot.effectiveAt,
+          JSON.stringify(snapshot.reasons)
+        ]
       );
     }
   } finally {
