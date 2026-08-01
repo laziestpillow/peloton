@@ -8,8 +8,11 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
-  Stage
+  Stage,
+  StageMarkerCrossing
 } from "../domain/models.js";
+import { matchActivityToStages } from "../domain/routeMatching.js";
+import { rankMarkerCrossings } from "../domain/scoring.js";
 import { normalizeActivityStreams } from "../domain/streamNormalization.js";
 import type { StravaGateway } from "../infrastructure/strava/StravaGateway.js";
 import type { TokenCipher } from "../infrastructure/strava/TokenCipher.js";
@@ -73,6 +76,15 @@ export interface ActivityStreamSamplesInput {
   samples: readonly ActivityStreamSample[];
 }
 
+export interface ActivityStageMatchInput {
+  activityId: string;
+  riderId: string;
+  stageId: string;
+  finishTimeSeconds: number;
+  matchedAt: Date;
+  markerCrossings: readonly StageMarkerCrossing[];
+}
+
 export interface ApplicationServices {
   stravaGateway: StravaGateway;
   tokenCipher: TokenCipher;
@@ -107,6 +119,9 @@ export interface ApplicationRepository {
   completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void>;
   upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
   replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void>;
+  listMatchableStages(): Promise<readonly Stage[]>;
+  listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]>;
+  saveActivityStageMatch(input: ActivityStageMatchInput): Promise<void>;
 }
 
 export interface ApplicationUseCases {
@@ -222,6 +237,49 @@ export function createApplicationUseCases(
         northEast: { latitude: 0, longitude: 0 }
       }
     };
+  }
+
+  async function matchAndPersistActivity(activity: ImportedActivity, samples: readonly ActivityStreamSample[]): Promise<void> {
+    const stages = await repository.listMatchableStages();
+    const match = matchActivityToStages(activity, samples, stages);
+    if (!match) {
+      return;
+    }
+
+    const existingCrossings = await repository.listStageMarkerCrossings(match.stage.id);
+    const rankedCrossings = match.stage.orderedMarkers.flatMap((marker) => {
+      const markerCrossings = [
+        ...existingCrossings
+          .filter((crossing) => crossing.markerId === marker.id && crossing.riderId !== activity.riderId)
+          .map((crossing) => ({
+            markerId: crossing.markerId,
+            riderId: crossing.riderId,
+            crossedAtSeconds: crossing.crossedAtSeconds
+          })),
+        ...match.markerCrossings.filter((crossing) => crossing.markerId === marker.id)
+      ];
+
+      return rankMarkerCrossings(marker, markerCrossings).map((crossing) => ({
+        stageId: match.stage.id,
+        markerId: marker.id,
+        activityId: crossing.riderId === activity.riderId
+          ? activity.id
+          : existingCrossings.find((existing) => existing.markerId === marker.id && existing.riderId === crossing.riderId)?.activityId ?? activity.id,
+        riderId: crossing.riderId,
+        crossedAtSeconds: crossing.crossedAtSeconds,
+        rank: crossing.rank,
+        points: crossing.points
+      }));
+    });
+
+    await repository.saveActivityStageMatch({
+      activityId: activity.id,
+      riderId: activity.riderId,
+      stageId: match.stage.id,
+      finishTimeSeconds: match.finishTimeSeconds,
+      matchedAt: now(),
+      markerCrossings: rankedCrossings
+    });
   }
 
   async function refreshStravaConnection(): Promise<StravaConnection | null> {
@@ -450,6 +508,9 @@ export function createApplicationUseCases(
           });
           if (!imported.duplicate && samples.length > 0) {
             await repository.replaceActivityStreamSamples({ activityId: imported.activity.id, samples });
+            if (imported.activity.importStatus === "eligible") {
+              await matchAndPersistActivity(imported.activity, samples);
+            }
           }
         }
 

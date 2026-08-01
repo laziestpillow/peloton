@@ -108,6 +108,27 @@ export const activityStreamSamples = pgTable("activity_stream_samples", {
   velocityMetersPerSecond: numeric("velocity_meters_per_second", { mode: "number" })
 }, (table) => [primaryKey({ columns: [table.activityId, table.sequence] })]);
 
+export const stageActivityResults = pgTable("stage_activity_results", {
+  stageId: text("stage_id").notNull().references(() => stages.id),
+  activityId: text("activity_id").notNull().references(() => importedActivities.id),
+  riderId: text("rider_id").notNull().references(() => riderProfiles.id),
+  finishTimeSeconds: integer("finish_time_seconds").notNull(),
+  matchedAt: timestamp("matched_at", { withTimezone: true }).notNull()
+}, (table) => [
+  primaryKey({ columns: [table.stageId, table.riderId] }),
+  unique().on(table.activityId)
+]);
+
+export const stageMarkerCrossings = pgTable("stage_marker_crossings", {
+  stageId: text("stage_id").notNull().references(() => stages.id),
+  markerId: text("marker_id").notNull().references(() => stageMarkers.id),
+  activityId: text("activity_id").notNull().references(() => importedActivities.id),
+  riderId: text("rider_id").notNull().references(() => riderProfiles.id),
+  crossedAtSeconds: integer("crossed_at_seconds").notNull(),
+  rank: integer("rank").notNull(),
+  points: integer("points").notNull()
+}, (table) => [primaryKey({ columns: [table.stageId, table.markerId, table.riderId] })]);
+
 export const stravaOAuthStates = pgTable("strava_oauth_states", {
   state: text("state").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),

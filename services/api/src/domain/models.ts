@@ -125,6 +125,24 @@ export interface StageScore {
   gcTimeSeconds: number;
 }
 
+export interface StageActivityResult {
+  stageId: string;
+  activityId: string;
+  riderId: string;
+  finishTimeSeconds: number;
+  matchedAt: string;
+}
+
+export interface StageMarkerCrossing {
+  stageId: string;
+  markerId: string;
+  activityId: string;
+  riderId: string;
+  crossedAtSeconds: number;
+  rank: number;
+  points: number;
+}
+
 export interface ArchetypeInput {
   riderId: string;
   sampleSize: number;

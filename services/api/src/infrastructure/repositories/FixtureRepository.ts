@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ApiFixtureData } from "../../application/fixtureData.js";
 import type {
   ActivitySyncStart,
+  ActivityStageMatchInput,
   ApplicationRepository,
   ActivityStreamSamplesInput,
   ImportedActivityInput,
@@ -18,7 +19,9 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
-  Stage
+  Stage,
+  StageActivityResult,
+  StageMarkerCrossing
 } from "../../domain/models.js";
 
 export class FixtureRepository implements ApplicationRepository {
@@ -26,6 +29,8 @@ export class FixtureRepository implements ApplicationRepository {
   private readonly stravaConnections = new Map<string, StravaConnection>();
   private readonly stravaActivities = new Map<string, ImportedActivity>();
   private readonly streamSamples = new Map<string, readonly ActivityStreamSample[]>();
+  private readonly stageActivityResults = new Map<string, StageActivityResult>();
+  private readonly stageMarkerCrossings = new Map<string, StageMarkerCrossing>();
   private readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
 
   constructor(private readonly fixtureData: ApiFixtureData) {}
@@ -211,5 +216,39 @@ export class FixtureRepository implements ApplicationRepository {
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
     this.streamSamples.set(input.activityId, input.samples);
+  }
+
+  async listMatchableStages(): Promise<readonly Stage[]> {
+    return this.fixtureData.stages.data;
+  }
+
+  async listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]> {
+    return Array.from(this.stageMarkerCrossings.values()).filter((crossing) => crossing.stageId === stageId);
+  }
+
+  async saveActivityStageMatch(input: ActivityStageMatchInput): Promise<void> {
+    this.stageActivityResults.set(`${input.stageId}:${input.riderId}`, {
+      stageId: input.stageId,
+      activityId: input.activityId,
+      riderId: input.riderId,
+      finishTimeSeconds: input.finishTimeSeconds,
+      matchedAt: input.matchedAt.toISOString()
+    });
+
+    for (const [key, activity] of this.stravaActivities) {
+      if (activity.id === input.activityId) {
+        this.stravaActivities.set(key, { ...activity, importStatus: "processing", processedStageId: input.stageId });
+      }
+    }
+
+    const markerIds = new Set(input.markerCrossings.map((crossing) => crossing.markerId));
+    for (const [key, crossing] of this.stageMarkerCrossings) {
+      if (crossing.stageId === input.stageId && markerIds.has(crossing.markerId)) {
+        this.stageMarkerCrossings.delete(key);
+      }
+    }
+    for (const crossing of input.markerCrossings) {
+      this.stageMarkerCrossings.set(`${crossing.stageId}:${crossing.markerId}:${crossing.riderId}`, crossing);
+    }
   }
 }
