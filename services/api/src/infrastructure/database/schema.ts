@@ -129,6 +129,24 @@ export const stageMarkerCrossings = pgTable("stage_marker_crossings", {
   points: integer("points").notNull()
 }, (table) => [primaryKey({ columns: [table.stageId, table.markerId, table.riderId] })]);
 
+export const stageClassifications = pgTable("stage_classifications", {
+  stageId: text("stage_id").notNull().references(() => stages.id),
+  riderId: text("rider_id").notNull().references(() => riderProfiles.id),
+  sprintPoints: integer("sprint_points").notNull(),
+  komPoints: integer("kom_points").notNull(),
+  finishBonus: integer("finish_bonus").notNull(),
+  todayTotal: integer("today_total").notNull(),
+  gcTimeSeconds: integer("gc_time_seconds").notNull()
+}, (table) => [primaryKey({ columns: [table.stageId, table.riderId] })]);
+
+export const seasonStandings = pgTable("season_standings", {
+  seasonId: text("season_id").notNull().references(() => seasons.id),
+  riderId: text("rider_id").notNull().references(() => riderProfiles.id),
+  seasonTotal: integer("season_total").notNull(),
+  rank: integer("rank").notNull(),
+  previousRank: integer("previous_rank")
+}, (table) => [primaryKey({ columns: [table.seasonId, table.riderId] })]);
+
 export const stravaOAuthStates = pgTable("strava_oauth_states", {
   state: text("state").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),

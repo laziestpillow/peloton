@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { assertSafeDatabaseTask, loadConfig } from "./config/env.js";
 import { readFixture } from "./application/fixtureData.js";
 import { runMigrations } from "./infrastructure/database/migrate.js";
-import type { ActivityListResponse, RiderProfile, Stage } from "./domain/models.js";
+import type { ActivityListResponse, RiderProfile, SeasonStandingsResponse, Stage, StageResultsResponse } from "./domain/models.js";
 
 interface RecapFixture {
   riders: readonly RiderProfile[];
@@ -13,6 +13,8 @@ async function seedDatabase(databaseUrl: string): Promise<void> {
   const recap = await readFixture<RecapFixture>("recap.json");
   const activities = await readFixture<ActivityListResponse>("activities.json");
   const stages = await readFixture<{ data: readonly Stage[] }>("stages.json");
+  const stageResults = await readFixture<StageResultsResponse>("stage-results.json");
+  const seasonStandings = await readFixture<SeasonStandingsResponse>("season-standings.json");
   const now = new Date("2026-07-01T10:00:00Z");
 
   try {
@@ -193,6 +195,90 @@ async function seedDatabase(databaseUrl: string): Promise<void> {
           activity.importStatus,
           activity.processedStageId
         ]
+      );
+    }
+
+    const activityByStageAndRider = new Map(
+      activities.data
+        .filter((activity) => activity.processedStageId)
+        .map((activity) => [`${activity.processedStageId}:${activity.riderId}`, activity])
+    );
+
+    for (const classification of stageResults.classifications) {
+      const matchedActivity = activityByStageAndRider.get(`${classification.stageId}:${classification.riderId}`);
+      if (matchedActivity) {
+        await pool.query(
+          `
+            INSERT INTO stage_activity_results (stage_id, activity_id, rider_id, finish_time_seconds, matched_at)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (stage_id, rider_id) DO UPDATE SET
+              activity_id = EXCLUDED.activity_id,
+              finish_time_seconds = EXCLUDED.finish_time_seconds,
+              matched_at = EXCLUDED.matched_at
+          `,
+          [classification.stageId, matchedActivity.id, classification.riderId, classification.gcTimeSeconds, now]
+        );
+      }
+
+      await pool.query(
+        `
+          INSERT INTO stage_classifications (
+            stage_id, rider_id, sprint_points, kom_points, finish_bonus, today_total, gc_time_seconds
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (stage_id, rider_id) DO UPDATE SET
+            sprint_points = EXCLUDED.sprint_points,
+            kom_points = EXCLUDED.kom_points,
+            finish_bonus = EXCLUDED.finish_bonus,
+            today_total = EXCLUDED.today_total,
+            gc_time_seconds = EXCLUDED.gc_time_seconds
+        `,
+        [
+          classification.stageId,
+          classification.riderId,
+          classification.sprintPoints,
+          classification.komPoints,
+          classification.finishBonus,
+          classification.todayTotal,
+          classification.gcTimeSeconds
+        ]
+      );
+    }
+
+    for (const markerResult of stageResults.markerResults) {
+      for (const crossing of markerResult.crossings) {
+        const matchedActivity = activityByStageAndRider.get(`${stageResults.stageId}:${crossing.riderId}`);
+        if (!matchedActivity) {
+          continue;
+        }
+        await pool.query(
+          `
+            INSERT INTO stage_marker_crossings (
+              stage_id, marker_id, activity_id, rider_id, crossed_at_seconds, rank, points
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (stage_id, marker_id, rider_id) DO UPDATE SET
+              activity_id = EXCLUDED.activity_id,
+              crossed_at_seconds = EXCLUDED.crossed_at_seconds,
+              rank = EXCLUDED.rank,
+              points = EXCLUDED.points
+          `,
+          [stageResults.stageId, markerResult.markerId, matchedActivity.id, crossing.riderId, crossing.crossedAtSeconds, crossing.rank, crossing.points]
+        );
+      }
+    }
+
+    for (const standing of seasonStandings.standings) {
+      await pool.query(
+        `
+          INSERT INTO season_standings (season_id, rider_id, season_total, rank, previous_rank)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (season_id, rider_id) DO UPDATE SET
+            season_total = EXCLUDED.season_total,
+            rank = EXCLUDED.rank,
+            previous_rank = EXCLUDED.previous_rank
+        `,
+        [standing.seasonId, standing.riderId, standing.seasonTotal, standing.rank, standing.previousRank]
       );
     }
   } finally {

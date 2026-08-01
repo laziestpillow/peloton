@@ -21,9 +21,14 @@ import type {
   RiderAppearance,
   RiderProfile,
   RouteSummary,
+  SeasonStanding,
+  SeasonStandingsResponse,
   Stage,
+  StageResultsResponse,
+  StageScore,
   StageMarkerCrossing
 } from "../../domain/models.js";
+import { materializeSeasonStandings, materializeStageResults } from "../../domain/resultMaterialization.js";
 import type { Database } from "../database/client.js";
 import {
   activityStreamSamples,
@@ -33,8 +38,10 @@ import {
   importedActivities,
   riderProfiles,
   seasons,
-  stageMarkers,
+  seasonStandings,
   stageActivityResults,
+  stageClassifications,
+  stageMarkers,
   stageMarkerCrossings,
   stageRoutePoints,
   stages,
@@ -167,6 +174,28 @@ function toStageMarkerCrossing(row: typeof stageMarkerCrossings.$inferSelect): S
     crossedAtSeconds: row.crossedAtSeconds,
     rank: row.rank,
     points: row.points
+  };
+}
+
+function toStageScore(row: typeof stageClassifications.$inferSelect): StageScore {
+  return {
+    stageId: row.stageId,
+    riderId: row.riderId,
+    sprintPoints: row.sprintPoints,
+    komPoints: row.komPoints,
+    finishBonus: row.finishBonus,
+    todayTotal: row.todayTotal,
+    gcTimeSeconds: row.gcTimeSeconds
+  };
+}
+
+function toSeasonStanding(row: typeof seasonStandings.$inferSelect): SeasonStanding {
+  return {
+    seasonId: row.seasonId,
+    riderId: row.riderId,
+    seasonTotal: row.seasonTotal,
+    rank: row.rank,
+    previousRank: row.previousRank
   };
 }
 
@@ -563,25 +592,137 @@ export class PostgresRepository implements ApplicationRepository {
         await tx
           .delete(stageMarkerCrossings)
           .where(and(eq(stageMarkerCrossings.stageId, input.stageId), eq(stageMarkerCrossings.riderId, input.riderId)));
+      } else {
+        const markerIds = [...new Set(input.markerCrossings.map((crossing) => crossing.markerId))];
+        for (const markerId of markerIds) {
+          await tx
+            .delete(stageMarkerCrossings)
+            .where(and(eq(stageMarkerCrossings.stageId, input.stageId), eq(stageMarkerCrossings.markerId, markerId)));
+        }
+
+        await tx.insert(stageMarkerCrossings).values(input.markerCrossings.map((crossing) => ({
+          stageId: crossing.stageId,
+          markerId: crossing.markerId,
+          activityId: crossing.activityId,
+          riderId: crossing.riderId,
+          crossedAtSeconds: crossing.crossedAtSeconds,
+          rank: crossing.rank,
+          points: crossing.points
+        })));
+      }
+
+      const [stageRow] = await tx.select().from(stages).where(eq(stages.id, input.stageId)).limit(1);
+      if (!stageRow) {
         return;
       }
 
-      const markerIds = [...new Set(input.markerCrossings.map((crossing) => crossing.markerId))];
-      for (const markerId of markerIds) {
-        await tx
-          .delete(stageMarkerCrossings)
-          .where(and(eq(stageMarkerCrossings.stageId, input.stageId), eq(stageMarkerCrossings.markerId, markerId)));
+      const markerRows = await tx.select().from(stageMarkers).where(eq(stageMarkers.stageId, input.stageId)).orderBy(asc(stageMarkers.sequence));
+      const resultRows = await tx.select().from(stageActivityResults).where(eq(stageActivityResults.stageId, input.stageId));
+      const crossingRows = await tx.select().from(stageMarkerCrossings).where(eq(stageMarkerCrossings.stageId, input.stageId));
+      const stageResults = materializeStageResults(
+        toStage(stageRow, [], markerRows),
+        resultRows.map((result) => ({
+          riderId: result.riderId,
+          finishTimeSeconds: result.finishTimeSeconds
+        })),
+        crossingRows.map(toStageMarkerCrossing)
+      );
+
+      await tx.delete(stageClassifications).where(eq(stageClassifications.stageId, input.stageId));
+      if (stageResults.classifications.length > 0) {
+        await tx.insert(stageClassifications).values(stageResults.classifications.map((score) => ({
+          stageId: score.stageId,
+          riderId: score.riderId,
+          sprintPoints: score.sprintPoints,
+          komPoints: score.komPoints,
+          finishBonus: score.finishBonus,
+          todayTotal: score.todayTotal,
+          gcTimeSeconds: score.gcTimeSeconds
+        })));
       }
 
-      await tx.insert(stageMarkerCrossings).values(input.markerCrossings.map((crossing) => ({
-        stageId: crossing.stageId,
-        markerId: crossing.markerId,
-        activityId: crossing.activityId,
-        riderId: crossing.riderId,
-        crossedAtSeconds: crossing.crossedAtSeconds,
-        rank: crossing.rank,
-        points: crossing.points
-      })));
+      const previousRows = await tx.select().from(seasonStandings).where(eq(seasonStandings.seasonId, stageRow.seasonId));
+      const previousRanks = new Map(previousRows.map((standing) => [standing.riderId, standing.rank]));
+      const seasonScoreRows = await tx
+        .select({ classification: stageClassifications })
+        .from(stageClassifications)
+        .innerJoin(stages, eq(stageClassifications.stageId, stages.id))
+        .where(eq(stages.seasonId, stageRow.seasonId));
+      const standings = materializeSeasonStandings(
+        stageRow.seasonId,
+        seasonScoreRows.map((row) => toStageScore(row.classification)),
+        [...previousRanks.entries()].map(([riderId, rank]) => ({ riderId, rank }))
+      ).standings;
+
+      await tx.delete(seasonStandings).where(eq(seasonStandings.seasonId, stageRow.seasonId));
+      if (standings.length > 0) {
+        await tx.insert(seasonStandings).values(standings.map((standing) => ({
+          seasonId: standing.seasonId,
+          riderId: standing.riderId,
+          seasonTotal: standing.seasonTotal,
+          rank: standing.rank,
+          previousRank: standing.previousRank
+        })));
+      }
     });
+  }
+
+  async getStageResults(stageId: string): Promise<StageResultsResponse | null> {
+    const stage = await this.getStage(stageId);
+    if (!stage) {
+      return null;
+    }
+
+    const [classificationRows, crossingRows] = await Promise.all([
+      this.db.select().from(stageClassifications).where(eq(stageClassifications.stageId, stageId)).orderBy(asc(stageClassifications.gcTimeSeconds)),
+      this.db.select().from(stageMarkerCrossings).where(eq(stageMarkerCrossings.stageId, stageId)).orderBy(asc(stageMarkerCrossings.rank))
+    ]);
+    const classifications = classificationRows.map(toStageScore).toSorted((left, right) => {
+      const pointsDifference = right.todayTotal - left.todayTotal;
+      return pointsDifference === 0 ? left.gcTimeSeconds - right.gcTimeSeconds : pointsDifference;
+    });
+
+    const leaderBy = (score: (classification: StageScore) => number, direction: "asc" | "desc"): string => {
+      const [leader] = classifications.toSorted((left, right) => {
+        const scoreDifference = direction === "asc" ? score(left) - score(right) : score(right) - score(left);
+        return scoreDifference === 0 ? left.riderId.localeCompare(right.riderId) : scoreDifference;
+      });
+      return leader?.riderId ?? "";
+    };
+
+    return {
+      stageId,
+      markerResults: stage.orderedMarkers.map((marker) => ({
+        markerId: marker.id,
+        type: marker.type,
+        crossings: crossingRows
+          .filter((crossing) => crossing.markerId === marker.id)
+          .map((crossing) => ({
+            riderId: crossing.riderId,
+            crossedAtSeconds: crossing.crossedAtSeconds,
+            rank: crossing.rank,
+            points: crossing.points
+          }))
+      })),
+      classifications,
+      jerseyLeaders: {
+        green: leaderBy((classification) => classification.sprintPoints, "desc"),
+        polkaDot: leaderBy((classification) => classification.komPoints, "desc"),
+        yellow: leaderBy((classification) => classification.gcTimeSeconds, "asc")
+      }
+    };
+  }
+
+  async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {
+    const [season] = await this.db.select().from(seasons).where(eq(seasons.id, seasonId)).limit(1);
+    if (!season) {
+      return null;
+    }
+
+    const rows = await this.db.select().from(seasonStandings).where(eq(seasonStandings.seasonId, seasonId)).orderBy(asc(seasonStandings.rank));
+    return {
+      seasonId,
+      standings: rows.map(toSeasonStanding)
+    };
   }
 }

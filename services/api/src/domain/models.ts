@@ -125,6 +125,43 @@ export interface StageScore {
   gcTimeSeconds: number;
 }
 
+export interface StageMarkerResult {
+  markerId: string;
+  type: MarkerType;
+  crossings: readonly StageResultMarkerCrossing[];
+}
+
+export interface StageResultMarkerCrossing {
+  riderId: string;
+  crossedAtSeconds: number;
+  rank: number;
+  points: number;
+}
+
+export interface StageResultsResponse {
+  stageId: string;
+  markerResults: readonly StageMarkerResult[];
+  classifications: readonly StageScore[];
+  jerseyLeaders: {
+    green: string;
+    polkaDot: string;
+    yellow: string;
+  };
+}
+
+export interface SeasonStanding {
+  seasonId: string;
+  riderId: string;
+  seasonTotal: number;
+  rank: number;
+  previousRank: number | null;
+}
+
+export interface SeasonStandingsResponse {
+  seasonId: string;
+  standings: readonly SeasonStanding[];
+}
+
 export interface StageActivityResult {
   stageId: string;
   activityId: string;
