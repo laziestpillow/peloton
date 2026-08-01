@@ -1,7 +1,10 @@
-import type { StravaActivitySummary, StravaGateway, StravaTokenExchange } from "./StravaGateway.js";
+import type { StravaActivityStreams, StravaActivitySummary, StravaGateway, StravaTokenExchange } from "./StravaGateway.js";
 
 export class MockStravaGateway implements StravaGateway {
-  constructor(private readonly activities?: readonly StravaActivitySummary[]) {}
+  constructor(
+    private readonly activities?: readonly StravaActivitySummary[],
+    private readonly streamsByActivityId: ReadonlyMap<string, StravaActivityStreams> = new Map()
+  ) {}
 
   async exchangeAuthorizationCode(input: {
     clientId: string;
@@ -31,6 +34,20 @@ export class MockStravaGateway implements StravaGateway {
         polyline: "mock_polyline"
       }
     ];
+  }
+
+  async getActivityStreams(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivityStreams> {
+    return this.streamsByActivityId.get(input.providerActivityId) ?? {
+      time: [0, 60, 120],
+      distance: [0, 350, 725],
+      latlng: [
+        [41.39, 2.16],
+        [41.391, 2.161],
+        [41.392, 2.162]
+      ],
+      altitude: [35, 38, 41],
+      velocitySmooth: [0, 5.8, 6.1]
+    };
   }
 
   async refreshAccessToken(input: {

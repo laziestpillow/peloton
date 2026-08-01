@@ -9,6 +9,14 @@ export interface StravaActivitySummary {
   polyline?: string;
 }
 
+export interface StravaActivityStreams {
+  time: readonly number[];
+  distance: readonly number[];
+  latlng?: readonly (readonly [number, number])[];
+  altitude?: readonly number[];
+  velocitySmooth?: readonly number[];
+}
+
 export interface StravaTokenExchange {
   athleteId: string;
   accessToken: string;
@@ -31,6 +39,7 @@ export interface StravaGateway {
     acceptedScope?: string;
   }): Promise<StravaTokenExchange>;
   listRecentActivities(input: { accessToken: string }): Promise<readonly StravaActivitySummary[]>;
+  getActivityStreams(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivityStreams>;
   refreshAccessToken(input: {
     clientId: string;
     clientSecret: string;
@@ -67,6 +76,34 @@ function requireNumber(value: unknown, field: string): number {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function numberArray(value: unknown): readonly number[] {
+  return Array.isArray(value) ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item)) : [];
+}
+
+function latLngArray(value: unknown): readonly (readonly [number, number])[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const points = value.filter((point): point is readonly [number, number] =>
+    Array.isArray(point) &&
+    typeof point[0] === "number" &&
+    Number.isFinite(point[0]) &&
+    typeof point[1] === "number" &&
+    Number.isFinite(point[1])
+  );
+  return points.length > 0 ? points : undefined;
+}
+
+function streamData(payload: unknown, key: string): unknown {
+  if (Array.isArray(payload)) {
+    return payload.find((stream) => typeof stream === "object" && stream !== null && (stream as { type?: unknown }).type === key)?.data;
+  }
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+  return (payload as Record<string, { data?: unknown } | undefined>)[key]?.data;
 }
 
 export class HttpStravaGateway implements StravaGateway {
@@ -145,6 +182,34 @@ export class HttpStravaGateway implements StravaGateway {
         ...(polyline ? { polyline } : {})
       };
     });
+  }
+
+  async getActivityStreams(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivityStreams> {
+    const keys = ["time", "distance", "latlng", "altitude", "velocity_smooth"].join(",");
+    const url = `https://www.strava.com/api/v3/activities/${encodeURIComponent(input.providerActivityId)}/streams?keys=${keys}&key_by_type=true`;
+    const response = await fetch(url, {
+      headers: { authorization: `Bearer ${input.accessToken}` }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Strava activity streams fetch failed with status ${response.status}.`);
+    }
+
+    const payload = await response.json() as unknown;
+    const time = numberArray(streamData(payload, "time"));
+    const distance = numberArray(streamData(payload, "distance"));
+    const latlng = latLngArray(streamData(payload, "latlng"));
+    if (time.length === 0 || distance.length === 0) {
+      throw new Error("Strava activity streams missing time or distance data.");
+    }
+
+    return {
+      time,
+      distance,
+      ...(latlng ? { latlng } : {}),
+      altitude: numberArray(streamData(payload, "altitude")),
+      velocitySmooth: numberArray(streamData(payload, "velocity_smooth"))
+    };
   }
 
   async refreshAccessToken(input: {

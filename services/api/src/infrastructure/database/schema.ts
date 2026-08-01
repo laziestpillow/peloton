@@ -97,6 +97,17 @@ export const importedActivities = pgTable("imported_activities", {
   processedStageId: text("processed_stage_id")
 }, (table) => [unique().on(table.provider, table.providerActivityId)]);
 
+export const activityStreamSamples = pgTable("activity_stream_samples", {
+  activityId: text("activity_id").notNull().references(() => importedActivities.id),
+  sequence: integer("sequence").notNull(),
+  timeSeconds: integer("time_seconds").notNull(),
+  distanceMeters: numeric("distance_meters", { mode: "number" }).notNull(),
+  latitude: numeric("latitude", { mode: "number" }),
+  longitude: numeric("longitude", { mode: "number" }),
+  altitudeMeters: numeric("altitude_meters", { mode: "number" }),
+  velocityMetersPerSecond: numeric("velocity_meters_per_second", { mode: "number" })
+}, (table) => [primaryKey({ columns: [table.activityId, table.sequence] })]);
+
 export const stravaOAuthStates = pgTable("strava_oauth_states", {
   state: text("state").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),

@@ -3,6 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type {
   ActivitySyncStart,
   ApplicationRepository,
+  ActivityStreamSamplesInput,
   ImportedActivityInput,
   StravaConnection,
   StravaConnectionInput,
@@ -11,6 +12,7 @@ import type {
 } from "../../application/useCases.js";
 import type {
   ActivityListResponse,
+  ActivityStreamSample,
   Group,
   GroupMembership,
   ImportedActivity,
@@ -22,6 +24,7 @@ import type {
 } from "../../domain/models.js";
 import type { Database } from "../database/client.js";
 import {
+  activityStreamSamples,
   activitySyncRequests,
   groupMemberships,
   groups,
@@ -480,5 +483,23 @@ export class PostgresRepository implements ApplicationRepository {
       throw new Error("Imported activity insert did not return a row.");
     }
     return { activity: toImportedActivity(row), duplicate: false };
+  }
+
+  async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
+    await this.db.delete(activityStreamSamples).where(eq(activityStreamSamples.activityId, input.activityId));
+    if (input.samples.length === 0) {
+      return;
+    }
+
+    await this.db.insert(activityStreamSamples).values(input.samples.map((sample: ActivityStreamSample) => ({
+      activityId: input.activityId,
+      sequence: sample.sequence,
+      timeSeconds: sample.timeSeconds,
+      distanceMeters: sample.distanceMeters,
+      latitude: sample.latitude,
+      longitude: sample.longitude,
+      altitudeMeters: sample.altitudeMeters,
+      velocityMetersPerSecond: sample.velocityMetersPerSecond
+    })));
   }
 }

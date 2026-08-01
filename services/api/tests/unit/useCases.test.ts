@@ -3,6 +3,7 @@ import {
   createApplicationUseCases,
   type ActivitySyncStart,
   type ApplicationRepository,
+  type ActivityStreamSamplesInput,
   type ImportedActivityInput,
   type StravaConnection,
   type StravaConnectionInput,
@@ -12,6 +13,7 @@ import {
 import type { ApiFixtureData } from "../../src/application/fixtureData.js";
 import type {
   ActivityListResponse,
+  ActivityStreamSample,
   Group,
   GroupMembership,
   ImportedActivity,
@@ -20,7 +22,7 @@ import type {
   Stage
 } from "../../src/domain/models.js";
 import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
-import type { StravaGateway, StravaTokenExchange } from "../../src/infrastructure/strava/StravaGateway.js";
+import type { StravaActivityStreams, StravaGateway, StravaTokenExchange } from "../../src/infrastructure/strava/StravaGateway.js";
 import { createTokenCipher } from "../../src/infrastructure/strava/TokenCipher.js";
 
 const rider: RiderProfile = {
@@ -101,6 +103,7 @@ class InMemoryRepository implements ApplicationRepository {
   readonly stravaStates = new Map<string, StravaOAuthState>();
   readonly stravaConnections = new Map<string, StravaConnection>();
   readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
+  readonly streamSamples = new Map<string, readonly ActivityStreamSample[]>();
 
   async listActivities(userId: string): Promise<ActivityListResponse> {
     return {
@@ -265,6 +268,10 @@ class InMemoryRepository implements ApplicationRepository {
     this.activities.set(input.providerActivityId, imported);
     return { activity: imported, duplicate: false };
   }
+
+  async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
+    this.streamSamples.set(input.activityId, input.samples);
+  }
 }
 
 class FailingRefreshGateway extends MockStravaGateway {
@@ -282,6 +289,13 @@ class RecordingGateway implements StravaGateway {
 
   async listRecentActivities(): Promise<readonly []> {
     return [];
+  }
+
+  async getActivityStreams(): Promise<StravaActivityStreams> {
+    return {
+      time: [0],
+      distance: [0]
+    };
   }
 
   async refreshAccessToken(): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }> {
@@ -488,7 +502,19 @@ describe("application use cases", () => {
         movingTimeSeconds: 2050,
         elevationGainMeters: 75
       }
-    ]);
+    ], new Map([
+      ["strava-ride-001", {
+        time: [0, 90, 180],
+        distance: [0, 700, 1510],
+        latlng: [
+          [41.38, 2.15],
+          [41.39, 2.16],
+          [41.4, 2.17]
+        ],
+        altitude: [32, 36, 39],
+        velocitySmooth: [0, 7.8, 8.1]
+      }]
+    ]));
     const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
 
     await expect(useCases.syncActivities({ idempotencyKey: "sync-key-001" })).resolves.toEqual({
@@ -499,10 +525,47 @@ describe("application use cases", () => {
     expect(repository.activities.get("strava-ride-001")).toMatchObject({
       provider: "strava",
       importStatus: "eligible",
-      movingTimeSeconds: 3400
+      movingTimeSeconds: 3400,
+      routeSummary: {
+        polyline: "strava_polyline",
+        previewBounds: {
+          southWest: { latitude: 41.38, longitude: 2.15 },
+          northEast: { latitude: 41.4, longitude: 2.17 }
+        }
+      }
     });
+    const importedRide = repository.activities.get("strava-ride-001");
+    expect(importedRide ? repository.streamSamples.get(importedRide.id) : undefined).toEqual([
+      { sequence: 0, timeSeconds: 0, distanceMeters: 0, latitude: 41.38, longitude: 2.15, altitudeMeters: 32, velocityMetersPerSecond: 0 },
+      { sequence: 1, timeSeconds: 90, distanceMeters: 700, latitude: 41.39, longitude: 2.16, altitudeMeters: 36, velocityMetersPerSecond: 7.8 },
+      { sequence: 2, timeSeconds: 180, distanceMeters: 1510, latitude: 41.4, longitude: 2.17, altitudeMeters: 39, velocityMetersPerSecond: 8.1 }
+    ]);
     expect(repository.activities.get("strava-run-001")).toMatchObject({ importStatus: "unsupported" });
     expect(repository.stravaConnections.get("user-001")?.lastSyncedAt).toEqual(new Date("2026-07-31T10:00:00.000Z"));
+  });
+
+  test("marks a supported Strava activity failed when stream fetch fails", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection());
+    const gateway = new MockStravaGateway([
+      {
+        providerActivityId: "strava-stream-failure-001",
+        sportType: "Ride",
+        startedAt: "2026-07-30T06:15:00Z",
+        distanceMeters: 25000,
+        elapsedTimeSeconds: 3600,
+        movingTimeSeconds: 3400,
+        elevationGainMeters: 420
+      }
+    ], new Map([
+      ["strava-stream-failure-001", { time: [], distance: [] }]
+    ]));
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    await expect(useCases.syncActivities({ idempotencyKey: "stream-failure" })).resolves.toMatchObject({ status: "accepted" });
+
+    expect(repository.activities.get("strava-stream-failure-001")).toMatchObject({ importStatus: "failed" });
+    expect(repository.stravaConnections.get("user-001")?.status).toBe("connected");
   });
 
   test("prevents duplicate activity syncs by idempotency key", async () => {
