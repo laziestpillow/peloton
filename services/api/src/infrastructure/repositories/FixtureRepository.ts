@@ -19,6 +19,7 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
+  SeasonArchetypesResponse,
   SeasonStandingsResponse,
   Stage,
   StageActivityResult,
@@ -260,5 +261,10 @@ export class FixtureRepository implements ApplicationRepository {
 
   async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {
     return this.fixtureData.seasonStandings.seasonId === seasonId ? this.fixtureData.seasonStandings : null;
+  }
+
+  async getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null> {
+    const data = this.fixtureData.seasonArchetypes.data.filter((snapshot) => snapshot.seasonId === seasonId);
+    return data.length > 0 ? { data } : null;
   }
 }

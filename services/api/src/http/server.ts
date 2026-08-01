@@ -258,9 +258,13 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     }
     return standings;
   });
-  app.get("/v1/seasons/:seasonId/archetypes", async (request) => {
+  app.get<{ Params: { seasonId: string } }>("/v1/seasons/:seasonId/archetypes", async (request, reply) => {
     const useCases = getUseCases(request);
-    return useCases.getSeasonArchetypes();
+    const archetypes = await useCases.getSeasonArchetypes(request.params.seasonId);
+    if (!archetypes) {
+      return sendError(request, reply, 404, "not_found", "Season archetypes not found.");
+    }
+    return archetypes;
   });
 
   return app;

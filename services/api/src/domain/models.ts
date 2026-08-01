@@ -162,6 +162,24 @@ export interface SeasonStandingsResponse {
   standings: readonly SeasonStanding[];
 }
 
+export interface ArchetypeSnapshot {
+  seasonId: string;
+  riderId: string;
+  archetype: Archetype;
+  confidence: number;
+  sampleSize: number;
+  sprintRelativeScore: number;
+  climbRelativeScore: number;
+  shortEffortScore: number;
+  sustainedEffortScore: number;
+  effectiveAt: string;
+  reasons: readonly string[];
+}
+
+export interface SeasonArchetypesResponse {
+  data: readonly ArchetypeSnapshot[];
+}
+
 export interface StageActivityResult {
   stageId: string;
   activityId: string;

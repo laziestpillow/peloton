@@ -8,6 +8,7 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
+  SeasonArchetypesResponse,
   SeasonStandingsResponse,
   Stage,
   StageResultsResponse,
@@ -126,6 +127,7 @@ export interface ApplicationRepository {
   saveActivityStageMatch(input: ActivityStageMatchInput): Promise<void>;
   getStageResults(stageId: string): Promise<StageResultsResponse | null>;
   getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
+  getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null>;
 }
 
 export interface ApplicationUseCases {
@@ -147,7 +149,7 @@ export interface ApplicationUseCases {
   getStageRecap(): Promise<unknown>;
   getStageResults(stageId: string): Promise<StageResultsResponse | null>;
   getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
-  getSeasonArchetypes(): Promise<unknown>;
+  getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null>;
 }
 
 export class ApplicationError extends Error {
@@ -539,24 +541,8 @@ export function createApplicationUseCases(
     async getSeasonStandings(seasonId) {
       return repository.getSeasonStandings(seasonId);
     },
-    async getSeasonArchetypes() {
-      return {
-        data: [
-          {
-            seasonId: "season-001",
-            riderId: "rider-001",
-            archetype: "sprinter",
-            confidence: 0.76,
-            sampleSize: 5,
-            sprintRelativeScore: 0.82,
-            climbRelativeScore: 0.61,
-            shortEffortScore: 0.7,
-            sustainedEffortScore: 0.58,
-            effectiveAt: "2026-07-20T10:00:00Z",
-            reasons: ["Sprint score is the strongest relative signal."]
-          }
-        ]
-      };
+    async getSeasonArchetypes(seasonId) {
+      return repository.getSeasonArchetypes(seasonId);
     }
   };
 }

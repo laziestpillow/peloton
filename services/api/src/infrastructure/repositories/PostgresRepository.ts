@@ -14,6 +14,8 @@ import type {
 import type {
   ActivityListResponse,
   ActivityStreamSample,
+  Archetype,
+  ArchetypeSnapshot,
   Group,
   GroupMembership,
   ImportedActivity,
@@ -22,17 +24,20 @@ import type {
   RiderProfile,
   RouteSummary,
   SeasonStanding,
+  SeasonArchetypesResponse,
   SeasonStandingsResponse,
   Stage,
   StageResultsResponse,
   StageScore,
   StageMarkerCrossing
 } from "../../domain/models.js";
+import { materializeArchetypeSnapshots } from "../../domain/archetypes.js";
 import { materializeSeasonStandings, materializeStageResults } from "../../domain/resultMaterialization.js";
 import type { Database } from "../database/client.js";
 import {
   activityStreamSamples,
   activitySyncRequests,
+  archetypeSnapshots,
   groupMemberships,
   groups,
   importedActivities,
@@ -196,6 +201,40 @@ function toSeasonStanding(row: typeof seasonStandings.$inferSelect): SeasonStand
     seasonTotal: row.seasonTotal,
     rank: row.rank,
     previousRank: row.previousRank
+  };
+}
+
+function toArchetype(value: string): Archetype {
+  switch (value) {
+    case "rookie":
+    case "climber":
+    case "sprinter":
+    case "allRounder":
+    case "puncheur":
+    case "rouleur":
+      return value;
+    default:
+      return "rookie";
+  }
+}
+
+function toReasons(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function toArchetypeSnapshot(row: typeof archetypeSnapshots.$inferSelect): ArchetypeSnapshot {
+  return {
+    seasonId: row.seasonId,
+    riderId: row.riderId,
+    archetype: toArchetype(row.archetype),
+    confidence: row.confidence,
+    sampleSize: row.sampleSize,
+    sprintRelativeScore: row.sprintRelativeScore,
+    climbRelativeScore: row.climbRelativeScore,
+    shortEffortScore: row.shortEffortScore,
+    sustainedEffortScore: row.sustainedEffortScore,
+    effectiveAt: toIsoString(row.effectiveAt),
+    reasons: toReasons(row.reasons)
   };
 }
 
@@ -664,6 +703,30 @@ export class PostgresRepository implements ApplicationRepository {
           previousRank: standing.previousRank
         })));
       }
+
+      const previousSnapshotRows = await tx.select().from(archetypeSnapshots).where(eq(archetypeSnapshots.seasonId, stageRow.seasonId));
+      const snapshots = materializeArchetypeSnapshots(
+        stageRow.seasonId,
+        seasonScoreRows.map((row) => toStageScore(row.classification)),
+        input.matchedAt,
+        previousSnapshotRows.map(toArchetypeSnapshot)
+      );
+      await tx.delete(archetypeSnapshots).where(eq(archetypeSnapshots.seasonId, stageRow.seasonId));
+      if (snapshots.length > 0) {
+        await tx.insert(archetypeSnapshots).values(snapshots.map((snapshot) => ({
+          seasonId: snapshot.seasonId,
+          riderId: snapshot.riderId,
+          archetype: snapshot.archetype,
+          confidence: snapshot.confidence,
+          sampleSize: snapshot.sampleSize,
+          sprintRelativeScore: snapshot.sprintRelativeScore,
+          climbRelativeScore: snapshot.climbRelativeScore,
+          shortEffortScore: snapshot.shortEffortScore,
+          sustainedEffortScore: snapshot.sustainedEffortScore,
+          effectiveAt: new Date(snapshot.effectiveAt),
+          reasons: snapshot.reasons
+        })));
+      }
     });
   }
 
@@ -724,5 +787,19 @@ export class PostgresRepository implements ApplicationRepository {
       seasonId,
       standings: rows.map(toSeasonStanding)
     };
+  }
+
+  async getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null> {
+    const [season] = await this.db.select().from(seasons).where(eq(seasons.id, seasonId)).limit(1);
+    if (!season) {
+      return null;
+    }
+
+    const rows = await this.db
+      .select()
+      .from(archetypeSnapshots)
+      .where(eq(archetypeSnapshots.seasonId, seasonId))
+      .orderBy(asc(archetypeSnapshots.riderId));
+    return { data: rows.map(toArchetypeSnapshot) };
   }
 }

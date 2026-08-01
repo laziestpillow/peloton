@@ -72,6 +72,22 @@ const standingsSchema = z.object({
   standings: z.array(z.object({ riderId: z.string(), seasonTotal: z.number().int(), rank: z.number().int() }))
 });
 
+const archetypesSchema = z.object({
+  data: z.array(z.object({
+    seasonId: z.string(),
+    riderId: z.string(),
+    archetype: z.enum(["rookie", "climber", "sprinter", "allRounder", "puncheur", "rouleur"]),
+    confidence: z.number().min(0).max(1),
+    sampleSize: z.number().int(),
+    sprintRelativeScore: z.number(),
+    climbRelativeScore: z.number(),
+    shortEffortScore: z.number(),
+    sustainedEffortScore: z.number(),
+    effectiveAt: z.string().datetime(),
+    reasons: z.array(z.string())
+  }))
+});
+
 async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await readFile(resolve(root, path), "utf8"));
 }
@@ -83,6 +99,7 @@ export async function checkContract(): Promise<void> {
   recapSchema.parse(await readJson("contracts/fixtures/recap.json"));
   stageResultsSchema.parse(await readJson("contracts/fixtures/stage-results.json"));
   standingsSchema.parse(await readJson("contracts/fixtures/season-standings.json"));
+  archetypesSchema.parse(await readJson("contracts/fixtures/archetypes.json"));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

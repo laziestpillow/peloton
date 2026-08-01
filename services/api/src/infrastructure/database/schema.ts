@@ -147,6 +147,20 @@ export const seasonStandings = pgTable("season_standings", {
   previousRank: integer("previous_rank")
 }, (table) => [primaryKey({ columns: [table.seasonId, table.riderId] })]);
 
+export const archetypeSnapshots = pgTable("archetype_snapshots", {
+  seasonId: text("season_id").notNull().references(() => seasons.id),
+  riderId: text("rider_id").notNull().references(() => riderProfiles.id),
+  archetype: text("archetype").notNull(),
+  confidence: numeric("confidence", { mode: "number" }).notNull(),
+  sampleSize: integer("sample_size").notNull(),
+  sprintRelativeScore: numeric("sprint_relative_score", { mode: "number" }).notNull(),
+  climbRelativeScore: numeric("climb_relative_score", { mode: "number" }).notNull(),
+  shortEffortScore: numeric("short_effort_score", { mode: "number" }).notNull(),
+  sustainedEffortScore: numeric("sustained_effort_score", { mode: "number" }).notNull(),
+  effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(),
+  reasons: jsonb("reasons").notNull()
+}, (table) => [primaryKey({ columns: [table.seasonId, table.riderId] })]);
+
 export const stravaOAuthStates = pgTable("strava_oauth_states", {
   state: text("state").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
