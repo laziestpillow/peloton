@@ -242,13 +242,21 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     const useCases = getUseCases(request);
     return useCases.getStageRecap();
   });
-  app.get("/v1/stages/:stageId/results", async (request) => {
+  app.get<{ Params: { stageId: string } }>("/v1/stages/:stageId/results", async (request, reply) => {
     const useCases = getUseCases(request);
-    return useCases.getStageResults();
+    const results = await useCases.getStageResults(request.params.stageId);
+    if (!results) {
+      return sendError(request, reply, 404, "not_found", "Stage results not found.");
+    }
+    return results;
   });
-  app.get("/v1/seasons/:seasonId/standings", async (request) => {
+  app.get<{ Params: { seasonId: string } }>("/v1/seasons/:seasonId/standings", async (request, reply) => {
     const useCases = getUseCases(request);
-    return useCases.getSeasonStandings();
+    const standings = await useCases.getSeasonStandings(request.params.seasonId);
+    if (!standings) {
+      return sendError(request, reply, 404, "not_found", "Season standings not found.");
+    }
+    return standings;
   });
   app.get("/v1/seasons/:seasonId/archetypes", async (request) => {
     const useCases = getUseCases(request);

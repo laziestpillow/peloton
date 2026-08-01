@@ -8,7 +8,9 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
+  SeasonStandingsResponse,
   Stage,
+  StageResultsResponse,
   StageMarkerCrossing
 } from "../domain/models.js";
 import { matchActivityToStages } from "../domain/routeMatching.js";
@@ -122,6 +124,8 @@ export interface ApplicationRepository {
   listMatchableStages(): Promise<readonly Stage[]>;
   listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]>;
   saveActivityStageMatch(input: ActivityStageMatchInput): Promise<void>;
+  getStageResults(stageId: string): Promise<StageResultsResponse | null>;
+  getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
 }
 
 export interface ApplicationUseCases {
@@ -141,8 +145,8 @@ export interface ApplicationUseCases {
   disconnectStrava(): Promise<void>;
   syncActivities(input?: { idempotencyKey?: string }): Promise<{ status: "accepted" | "alreadyRunning"; requestedAt: string }>;
   getStageRecap(): Promise<unknown>;
-  getStageResults(): Promise<unknown>;
-  getSeasonStandings(): Promise<unknown>;
+  getStageResults(stageId: string): Promise<StageResultsResponse | null>;
+  getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
   getSeasonArchetypes(): Promise<unknown>;
 }
 
@@ -529,8 +533,12 @@ export function createApplicationUseCases(
       return { status: sync.status, requestedAt: sync.requestedAt.toISOString() };
     },
     getStageRecap: async () => fixtureData.recap,
-    getStageResults: async () => fixtureData.stageResults,
-    getSeasonStandings: async () => fixtureData.seasonStandings,
+    async getStageResults(stageId) {
+      return repository.getStageResults(stageId);
+    },
+    async getSeasonStandings(seasonId) {
+      return repository.getSeasonStandings(seasonId);
+    },
     async getSeasonArchetypes() {
       return {
         data: [

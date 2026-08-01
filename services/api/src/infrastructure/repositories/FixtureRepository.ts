@@ -19,8 +19,10 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
+  SeasonStandingsResponse,
   Stage,
   StageActivityResult,
+  StageResultsResponse,
   StageMarkerCrossing
 } from "../../domain/models.js";
 
@@ -250,5 +252,13 @@ export class FixtureRepository implements ApplicationRepository {
     for (const crossing of input.markerCrossings) {
       this.stageMarkerCrossings.set(`${crossing.stageId}:${crossing.markerId}:${crossing.riderId}`, crossing);
     }
+  }
+
+  async getStageResults(stageId: string): Promise<StageResultsResponse | null> {
+    return this.fixtureData.stageResults.stageId === stageId ? this.fixtureData.stageResults : null;
+  }
+
+  async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {
+    return this.fixtureData.seasonStandings.seasonId === seasonId ? this.fixtureData.seasonStandings : null;
   }
 }

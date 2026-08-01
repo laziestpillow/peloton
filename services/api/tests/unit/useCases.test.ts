@@ -20,8 +20,10 @@ import type {
   ImportedActivity,
   RiderAppearance,
   RiderProfile,
+  SeasonStandingsResponse,
   Stage,
   StageActivityResult,
+  StageResultsResponse,
   StageMarkerCrossing
 } from "../../src/domain/models.js";
 import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
@@ -92,12 +94,24 @@ const stage: Stage = {
   status: "completed"
 };
 
+const stageResults: StageResultsResponse = {
+  stageId: "stage-001",
+  markerResults: [],
+  classifications: [],
+  jerseyLeaders: { green: "", polkaDot: "", yellow: "" }
+};
+
+const seasonStandings: SeasonStandingsResponse = {
+  seasonId: "season-001",
+  standings: []
+};
+
 const fixtureData: ApiFixtureData = {
   activities: { data: [activity], pagination: { nextCursor: null } },
   stages: { data: [stage] },
   recap: { riders: [rider] },
-  stageResults: {},
-  seasonStandings: {}
+  stageResults,
+  seasonStandings
 };
 
 class InMemoryRepository implements ApplicationRepository {
@@ -308,6 +322,14 @@ class InMemoryRepository implements ApplicationRepository {
     for (const crossing of input.markerCrossings) {
       this.stageMarkerCrossings.set(`${crossing.stageId}:${crossing.markerId}:${crossing.riderId}`, crossing);
     }
+  }
+
+  async getStageResults(stageId: string): Promise<StageResultsResponse | null> {
+    return stageId === stageResults.stageId ? stageResults : null;
+  }
+
+  async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {
+    return seasonId === seasonStandings.seasonId ? seasonStandings : null;
   }
 }
 

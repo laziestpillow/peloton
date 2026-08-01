@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import type { ActivityListResponse, RiderProfile, Stage } from "../domain/models.js";
+import type { ActivityListResponse, RiderProfile, SeasonStandingsResponse, Stage, StageResultsResponse } from "../domain/models.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(currentDir, "../../../..");
@@ -14,8 +14,8 @@ export interface ApiFixtureData {
   activities: ActivityListResponse;
   stages: { data: readonly Stage[] };
   recap: RecapFixture;
-  stageResults: unknown;
-  seasonStandings: unknown;
+  stageResults: StageResultsResponse;
+  seasonStandings: SeasonStandingsResponse;
 }
 
 export async function readFixture<T>(name: string): Promise<T> {
@@ -28,8 +28,8 @@ export async function loadApiFixtureData(): Promise<ApiFixtureData> {
     readFixture<ActivityListResponse>("activities.json"),
     readFixture<{ data: readonly Stage[] }>("stages.json"),
     readFixture<RecapFixture>("recap.json"),
-    readFixture("stage-results.json"),
-    readFixture("season-standings.json")
+    readFixture<StageResultsResponse>("stage-results.json"),
+    readFixture<SeasonStandingsResponse>("season-standings.json")
   ]);
 
   return { activities, stages, recap, stageResults, seasonStandings };
