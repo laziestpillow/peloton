@@ -180,6 +180,26 @@ export interface SeasonArchetypesResponse {
   data: readonly ArchetypeSnapshot[];
 }
 
+export interface StravaWebhookSubscription {
+  id: number;
+  applicationId: number;
+  callbackUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StravaWebhookEvent {
+  objectType: "activity" | "athlete";
+  objectId: string;
+  aspectType: "create" | "update" | "delete";
+  ownerId: string;
+  subscriptionId: number;
+  eventTime: Date;
+  updates: Readonly<Record<string, string>>;
+}
+
+export type StravaWebhookAction = "sync_requested" | "delete_requested" | "deauthorization_requested" | "ignored";
+
 export interface StageActivityResult {
   stageId: string;
   activityId: string;

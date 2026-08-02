@@ -161,6 +161,19 @@ export const archetypeSnapshots = pgTable("archetype_snapshots", {
   reasons: jsonb("reasons").notNull()
 }, (table) => [primaryKey({ columns: [table.seasonId, table.riderId] })]);
 
+export const stravaWebhookEvents = pgTable("strava_webhook_events", {
+  id: text("id").primaryKey(),
+  objectType: text("object_type").notNull(),
+  objectId: text("object_id").notNull(),
+  aspectType: text("aspect_type").notNull(),
+  ownerId: text("owner_id").notNull(),
+  subscriptionId: integer("subscription_id").notNull(),
+  eventTime: timestamp("event_time", { withTimezone: true }).notNull(),
+  updates: jsonb("updates").notNull(),
+  action: text("action").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull()
+}, (table) => [unique().on(table.subscriptionId, table.objectType, table.objectId, table.aspectType, table.eventTime)]);
+
 export const stravaOAuthStates = pgTable("strava_oauth_states", {
   state: text("state").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),

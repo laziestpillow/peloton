@@ -12,10 +12,14 @@ import type {
   SeasonStandingsResponse,
   Stage,
   StageResultsResponse,
+  StravaWebhookAction,
+  StravaWebhookEvent,
+  StravaWebhookSubscription,
   StageMarkerCrossing
 } from "../domain/models.js";
 import { matchActivityToStages } from "../domain/routeMatching.js";
 import { rankMarkerCrossings } from "../domain/scoring.js";
+import { actionForStravaWebhookEvent, parseStravaWebhookEvent } from "../domain/stravaWebhook.js";
 import { normalizeActivityStreams } from "../domain/streamNormalization.js";
 import type { StravaGateway } from "../infrastructure/strava/StravaGateway.js";
 import type { TokenCipher } from "../infrastructure/strava/TokenCipher.js";
@@ -88,12 +92,20 @@ export interface ActivityStageMatchInput {
   markerCrossings: readonly StageMarkerCrossing[];
 }
 
+export interface StravaWebhookEventInput {
+  event: StravaWebhookEvent;
+  action: StravaWebhookAction;
+  receivedAt: Date;
+}
+
 export interface ApplicationServices {
   stravaGateway: StravaGateway;
   tokenCipher: TokenCipher;
   stravaClientId: string;
   stravaClientSecret: string;
   stravaCallbackUrl: string;
+  stravaWebhookCallbackUrl: string;
+  stravaWebhookVerifyToken: string;
   appDeepLinkUrl: string;
   stravaOAuthScope: string;
   stravaOAuthStateTtlSeconds: number;
@@ -128,6 +140,7 @@ export interface ApplicationRepository {
   getStageResults(stageId: string): Promise<StageResultsResponse | null>;
   getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
   getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null>;
+  recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void>;
 }
 
 export interface ApplicationUseCases {
@@ -150,6 +163,11 @@ export interface ApplicationUseCases {
   getStageResults(stageId: string): Promise<StageResultsResponse | null>;
   getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
   getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null>;
+  verifyStravaWebhook(input: { mode?: string; challenge?: string; verifyToken?: string }): Promise<{ "hub.challenge": string }>;
+  receiveStravaWebhook(payload: unknown): Promise<{ status: "accepted" }>;
+  listStravaWebhookSubscriptions(): Promise<{ data: readonly StravaWebhookSubscription[] }>;
+  createStravaWebhookSubscription(): Promise<{ id: number }>;
+  deleteStravaWebhookSubscription(subscriptionId: number): Promise<void>;
 }
 
 export class ApplicationError extends Error {
@@ -186,6 +204,9 @@ export function createApplicationUseCases(
     }
     if (!services.stravaClientId || !services.stravaClientSecret) {
       throw new ApplicationError(400, "bad_request", "Strava client credentials are not configured.");
+    }
+    if (!services.stravaWebhookVerifyToken) {
+      throw new ApplicationError(400, "bad_request", "Strava webhook verification token is not configured.");
     }
     return services;
   }
@@ -543,6 +564,60 @@ export function createApplicationUseCases(
     },
     async getSeasonArchetypes(seasonId) {
       return repository.getSeasonArchetypes(seasonId);
+    },
+    async verifyStravaWebhook(input) {
+      const strava = requireStravaServices();
+      if (input.mode !== "subscribe" || !input.challenge || input.verifyToken !== strava.stravaWebhookVerifyToken) {
+        throw new ApplicationError(403, "forbidden", "Invalid Strava webhook verification request.");
+      }
+      return { "hub.challenge": input.challenge };
+    },
+    async receiveStravaWebhook(payload) {
+      let event: StravaWebhookEvent;
+      try {
+        event = parseStravaWebhookEvent(payload);
+      } catch {
+        throw new ApplicationError(400, "bad_request", "Invalid Strava webhook event payload.");
+      }
+      await repository.recordStravaWebhookEvent({
+        event,
+        action: actionForStravaWebhookEvent(event),
+        receivedAt: now()
+      });
+      return { status: "accepted" };
+    },
+    async listStravaWebhookSubscriptions() {
+      const strava = requireStravaServices();
+      const subscriptions = await strava.stravaGateway.listWebhookSubscriptions({
+        clientId: strava.stravaClientId,
+        clientSecret: strava.stravaClientSecret
+      });
+      return {
+        data: subscriptions.map((subscription) => ({
+          id: subscription.id,
+          applicationId: subscription.applicationId,
+          callbackUrl: subscription.callbackUrl,
+          createdAt: subscription.createdAt.toISOString(),
+          updatedAt: subscription.updatedAt.toISOString()
+        }))
+      };
+    },
+    async createStravaWebhookSubscription() {
+      const strava = requireStravaServices();
+      return strava.stravaGateway.createWebhookSubscription({
+        clientId: strava.stravaClientId,
+        clientSecret: strava.stravaClientSecret,
+        callbackUrl: strava.stravaWebhookCallbackUrl,
+        verifyToken: strava.stravaWebhookVerifyToken
+      });
+    },
+    async deleteStravaWebhookSubscription(subscriptionId) {
+      const strava = requireStravaServices();
+      await strava.stravaGateway.deleteWebhookSubscription({
+        clientId: strava.stravaClientId,
+        clientSecret: strava.stravaClientSecret,
+        subscriptionId
+      });
     }
   };
 }

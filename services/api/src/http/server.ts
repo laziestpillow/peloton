@@ -73,6 +73,8 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     stravaClientId: config.STRAVA_CLIENT_ID ?? "",
     stravaClientSecret: config.STRAVA_CLIENT_SECRET ?? "",
     stravaCallbackUrl: config.STRAVA_CALLBACK_URL,
+    stravaWebhookCallbackUrl: config.STRAVA_WEBHOOK_CALLBACK_URL,
+    stravaWebhookVerifyToken: config.STRAVA_WEBHOOK_VERIFY_TOKEN,
     appDeepLinkUrl: config.APP_DEEP_LINK_URL,
     stravaOAuthScope: config.STRAVA_OAUTH_SCOPE,
     stravaOAuthStateTtlSeconds: config.STRAVA_OAUTH_STATE_TTL_SECONDS
@@ -143,6 +145,48 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   app.get("/v1/integrations/strava/status", async (request) => {
     const useCases = getUseCases(request);
     return useCases.getStravaStatus();
+  });
+
+  app.get("/v1/integrations/strava/webhook-subscription", async (request) => {
+    const useCases = getUseCases(request);
+    return useCases.listStravaWebhookSubscriptions();
+  });
+
+  app.post("/v1/integrations/strava/webhook-subscription", async (request, reply) => {
+    const useCases = getUseCases(request);
+    return reply.status(201).send(await useCases.createStravaWebhookSubscription());
+  });
+
+  app.delete<{ Querystring: { subscriptionId?: string } }>("/v1/integrations/strava/webhook-subscription", async (request, reply) => {
+    const subscriptionId = Number(request.query.subscriptionId);
+    if (!Number.isInteger(subscriptionId) || subscriptionId <= 0) {
+      return sendError(request, reply, 400, "bad_request", "Missing or invalid Strava webhook subscription ID.");
+    }
+    const useCases = getUseCases(request);
+    await useCases.deleteStravaWebhookSubscription(subscriptionId);
+    return reply.status(204).send();
+  });
+
+  app.get<{ Querystring: { "hub.mode"?: string; "hub.challenge"?: string; "hub.verify_token"?: string } }>("/v1/webhooks/strava", async (request, reply) => {
+    const useCases = createUseCasesForUser(config.CURRENT_USER_ID);
+    try {
+      return await useCases.verifyStravaWebhook({
+        ...(request.query["hub.mode"] ? { mode: request.query["hub.mode"] } : {}),
+        ...(request.query["hub.challenge"] ? { challenge: request.query["hub.challenge"] } : {}),
+        ...(request.query["hub.verify_token"] ? { verifyToken: request.query["hub.verify_token"] } : {})
+      });
+    } catch (error) {
+      return handleApplicationError(error, request, reply);
+    }
+  });
+
+  app.post("/v1/webhooks/strava", async (request, reply) => {
+    const useCases = createUseCasesForUser(config.CURRENT_USER_ID);
+    try {
+      return await useCases.receiveStravaWebhook(request.body);
+    } catch (error) {
+      return handleApplicationError(error, request, reply);
+    }
   });
 
   app.post("/v1/activities/sync", async (request, reply) => {

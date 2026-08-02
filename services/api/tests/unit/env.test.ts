@@ -21,6 +21,7 @@ describe("environment config", () => {
       NODE_ENV: "production",
       STRAVA_CLIENT_ID: "12345",
       STRAVA_CLIENT_SECRET: "secret",
+      STRAVA_WEBHOOK_VERIFY_TOKEN: "webhook-secret",
       STRAVA_TOKEN_ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
     })).toMatchObject({
       NODE_ENV: "production",
@@ -34,12 +35,14 @@ describe("environment config", () => {
       NODE_ENV: "production",
       STRAVA_CLIENT_ID: "12345",
       STRAVA_CLIENT_SECRET: "secret",
+      STRAVA_WEBHOOK_VERIFY_TOKEN: "webhook-secret",
       STRAVA_TOKEN_ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
     });
     const stagingConfig = loadConfig({
       NODE_ENV: "staging",
       STRAVA_CLIENT_ID: "12345",
       STRAVA_CLIENT_SECRET: "secret",
+      STRAVA_WEBHOOK_VERIFY_TOKEN: "webhook-secret",
       STRAVA_TOKEN_ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
     });
 
@@ -52,6 +55,7 @@ describe("environment config", () => {
       NODE_ENV: "production",
       STRAVA_CLIENT_ID: "12345",
       STRAVA_CLIENT_SECRET: "secret",
+      STRAVA_WEBHOOK_VERIFY_TOKEN: "webhook-secret",
       STRAVA_TOKEN_ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111",
       ALLOW_LIVE_DATABASE_TASKS: "true"
     });

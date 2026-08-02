@@ -1,6 +1,14 @@
 import type { StravaActivityStreams, StravaActivitySummary, StravaGateway, StravaTokenExchange } from "./StravaGateway.js";
 
 export class MockStravaGateway implements StravaGateway {
+  private readonly subscriptions = new Map<number, {
+    id: number;
+    applicationId: number;
+    callbackUrl: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>();
+
   constructor(
     private readonly activities?: readonly StravaActivitySummary[],
     private readonly streamsByActivityId: ReadonlyMap<string, StravaActivityStreams> = new Map()
@@ -69,5 +77,43 @@ export class MockStravaGateway implements StravaGateway {
     tokenTypeHint: "access_token" | "refresh_token";
   }): Promise<void> {
     return;
+  }
+
+  async createWebhookSubscription(input: {
+    clientId: string;
+    clientSecret: string;
+    callbackUrl: string;
+    verifyToken: string;
+  }): Promise<{ id: number }> {
+    const id = this.subscriptions.size + 1;
+    this.subscriptions.set(id, {
+      id,
+      applicationId: Number(input.clientId),
+      callbackUrl: input.callbackUrl,
+      createdAt: new Date("2026-07-31T10:00:00.000Z"),
+      updatedAt: new Date("2026-07-31T10:00:00.000Z")
+    });
+    return { id };
+  }
+
+  async listWebhookSubscriptions(_input: {
+    clientId: string;
+    clientSecret: string;
+  }): Promise<readonly {
+    id: number;
+    applicationId: number;
+    callbackUrl: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }[]> {
+    return [...this.subscriptions.values()];
+  }
+
+  async deleteWebhookSubscription(input: {
+    clientId: string;
+    clientSecret: string;
+    subscriptionId: number;
+  }): Promise<void> {
+    this.subscriptions.delete(input.subscriptionId);
   }
 }

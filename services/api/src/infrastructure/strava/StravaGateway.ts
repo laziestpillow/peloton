@@ -31,6 +31,14 @@ export interface StravaTokenRefresh {
   expiresAt: Date;
 }
 
+export interface StravaWebhookSubscription {
+  id: number;
+  applicationId: number;
+  callbackUrl: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface StravaGateway {
   exchangeAuthorizationCode(input: {
     clientId: string;
@@ -50,6 +58,21 @@ export interface StravaGateway {
     clientSecret: string;
     token: string;
     tokenTypeHint: "access_token" | "refresh_token";
+  }): Promise<void>;
+  createWebhookSubscription(input: {
+    clientId: string;
+    clientSecret: string;
+    callbackUrl: string;
+    verifyToken: string;
+  }): Promise<{ id: number }>;
+  listWebhookSubscriptions(input: {
+    clientId: string;
+    clientSecret: string;
+  }): Promise<readonly StravaWebhookSubscription[]>;
+  deleteWebhookSubscription(input: {
+    clientId: string;
+    clientSecret: string;
+    subscriptionId: number;
   }): Promise<void>;
 }
 
@@ -76,6 +99,10 @@ function requireNumber(value: unknown, field: string): number {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function optionalDate(value: unknown): Date {
+  return typeof value === "string" ? new Date(value) : new Date(0);
 }
 
 function numberArray(value: unknown): readonly number[] {
@@ -269,6 +296,71 @@ export class HttpStravaGateway implements StravaGateway {
 
     if (!response.ok) {
       throw new Error(`Strava token revoke failed with status ${response.status}.`);
+    }
+  }
+
+  async createWebhookSubscription(input: {
+    clientId: string;
+    clientSecret: string;
+    callbackUrl: string;
+    verifyToken: string;
+  }): Promise<{ id: number }> {
+    const body = new URLSearchParams({
+      client_id: input.clientId,
+      client_secret: input.clientSecret,
+      callback_url: input.callbackUrl,
+      verify_token: input.verifyToken
+    });
+    const response = await fetch("https://www.strava.com/api/v3/push_subscriptions", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body
+    });
+    if (!response.ok) {
+      throw new Error(`Strava webhook subscription creation failed with status ${response.status}.`);
+    }
+    const payload = await response.json() as { id?: unknown };
+    return { id: requireNumber(payload.id, "id") };
+  }
+
+  async listWebhookSubscriptions(input: {
+    clientId: string;
+    clientSecret: string;
+  }): Promise<readonly StravaWebhookSubscription[]> {
+    const url = new URL("https://www.strava.com/api/v3/push_subscriptions");
+    url.searchParams.set("client_id", input.clientId);
+    url.searchParams.set("client_secret", input.clientSecret);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Strava webhook subscription listing failed with status ${response.status}.`);
+    }
+    const payload = await response.json() as Array<{
+      id?: unknown;
+      application_id?: unknown;
+      callback_url?: unknown;
+      created_at?: unknown;
+      updated_at?: unknown;
+    }>;
+    return payload.map((subscription) => ({
+      id: requireNumber(subscription.id, "id"),
+      applicationId: requireNumber(subscription.application_id, "application_id"),
+      callbackUrl: requireString(subscription.callback_url, "callback_url"),
+      createdAt: optionalDate(subscription.created_at),
+      updatedAt: optionalDate(subscription.updated_at)
+    }));
+  }
+
+  async deleteWebhookSubscription(input: {
+    clientId: string;
+    clientSecret: string;
+    subscriptionId: number;
+  }): Promise<void> {
+    const url = new URL(`https://www.strava.com/api/v3/push_subscriptions/${input.subscriptionId}`);
+    url.searchParams.set("client_id", input.clientId);
+    url.searchParams.set("client_secret", input.clientSecret);
+    const response = await fetch(url, { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error(`Strava webhook subscription delete failed with status ${response.status}.`);
     }
   }
 }

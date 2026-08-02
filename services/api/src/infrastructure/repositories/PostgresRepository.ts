@@ -9,6 +9,7 @@ import type {
   StravaConnection,
   StravaConnectionInput,
   StravaConnectionUpdate,
+  StravaWebhookEventInput,
   StravaOAuthState
 } from "../../application/useCases.js";
 import type {
@@ -51,6 +52,7 @@ import {
   stageRoutePoints,
   stages,
   stravaConnections,
+  stravaWebhookEvents,
   stravaOAuthStates
 } from "../database/schema.js";
 
@@ -801,5 +803,23 @@ export class PostgresRepository implements ApplicationRepository {
       .where(eq(archetypeSnapshots.seasonId, seasonId))
       .orderBy(asc(archetypeSnapshots.riderId));
     return { data: rows.map(toArchetypeSnapshot) };
+  }
+
+  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void> {
+    await this.db
+      .insert(stravaWebhookEvents)
+      .values({
+        id: `strava-webhook-${randomUUID()}`,
+        objectType: input.event.objectType,
+        objectId: input.event.objectId,
+        aspectType: input.event.aspectType,
+        ownerId: input.event.ownerId,
+        subscriptionId: input.event.subscriptionId,
+        eventTime: input.event.eventTime,
+        updates: input.event.updates,
+        action: input.action,
+        receivedAt: input.receivedAt
+      })
+      .onConflictDoNothing();
   }
 }
