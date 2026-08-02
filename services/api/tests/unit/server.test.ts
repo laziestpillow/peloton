@@ -4,7 +4,7 @@ import type { AppConfig } from "../../src/config/env.js";
 import { loadApiFixtureData } from "../../src/application/fixtureData.js";
 import { FixtureRepository } from "../../src/infrastructure/repositories/FixtureRepository.js";
 import { MockStravaGateway } from "../../src/infrastructure/strava/MockStravaGateway.js";
-import { sensitiveLogRedactionPaths } from "../../src/http/server.js";
+import { createLoggerOptions, sensitiveLogRedactionPaths } from "../../src/http/server.js";
 
 const config: AppConfig = {
   NODE_ENV: "test",
@@ -370,6 +370,45 @@ describe("server repository-backed routes", () => {
     }
   });
 
+  test("echoes incoming request IDs on successful responses", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/health",
+        headers: { "x-request-id": "issue-25-success-id" }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["x-request-id"]).toBe("issue-25-success-id");
+      expect(response.json()).toEqual({ status: "ok" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("normalizes malformed JSON with request IDs", async () => {
+    const repository = new FixtureRepository(await loadApiFixtureData());
+    const app = await buildServer(config, { repository });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/groups",
+        headers: { ...userOneAuth, "content-type": "application/json", "x-request-id": "issue-25-json-id" },
+        payload: "{"
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.headers["x-request-id"]).toBe("issue-25-json-id");
+      expectErrorResponse(response, "bad_request", "Invalid request.", "issue-25-json-id");
+    } finally {
+      await app.close();
+    }
+  });
+
   test("normalizes unknown route errors with request IDs", async () => {
     const repository = new FixtureRepository(await loadApiFixtureData());
     const app = await buildServer(config, { repository });
@@ -386,15 +425,25 @@ describe("server repository-backed routes", () => {
   test("redacts known sensitive fields from request logs", () => {
     expect(sensitiveLogRedactionPaths).toEqual(expect.arrayContaining([
       "req.headers.authorization",
+      "req.headers.cookie",
       "req.query.code",
       "req.query.state",
+      "req.query[\"hub.verify_token\"]",
+      "req.body.accessToken",
+      "req.body.refreshToken",
+      "req.body.STRAVA_WEBHOOK_VERIFY_TOKEN",
       "accessToken",
       "refreshToken",
       "encryptedAccessToken",
       "encryptedRefreshToken",
       "STRAVA_CLIENT_SECRET",
+      "STRAVA_WEBHOOK_VERIFY_TOKEN",
       "STRAVA_TOKEN_ENCRYPTION_KEY",
       "DATABASE_URL"
     ]));
+    expect(createLoggerOptions("info").redact).toEqual({
+      paths: expect.arrayContaining(["req.headers.authorization", "STRAVA_CLIENT_SECRET"]),
+      censor: "[Redacted]"
+    });
   });
 });
