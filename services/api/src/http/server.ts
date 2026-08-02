@@ -23,9 +23,27 @@ export interface ServerOptions {
 
 export const sensitiveLogRedactionPaths = [
   "req.headers.authorization",
+  "req.headers.Authorization",
+  "req.headers.cookie",
+  "req.headers['set-cookie']",
   "req.query.code",
   "req.query.state",
   "req.query.error",
+  "req.query.hub.verify_token",
+  "req.query[\"hub.verify_token\"]",
+  "req.body.accessToken",
+  "req.body.refreshToken",
+  "req.body.encryptedAccessToken",
+  "req.body.encryptedRefreshToken",
+  "req.body.clientSecret",
+  "req.body.stravaClientSecret",
+  "req.body.STRAVA_CLIENT_SECRET",
+  "req.body.STRAVA_TOKEN_ENCRYPTION_KEY",
+  "req.body.STRAVA_WEBHOOK_VERIFY_TOKEN",
+  "res.body.accessToken",
+  "res.body.refreshToken",
+  "res.body.encryptedAccessToken",
+  "res.body.encryptedRefreshToken",
   "strava.accessToken",
   "strava.refreshToken",
   "accessToken",
@@ -35,6 +53,7 @@ export const sensitiveLogRedactionPaths = [
   "clientSecret",
   "stravaClientSecret",
   "STRAVA_CLIENT_SECRET",
+  "STRAVA_WEBHOOK_VERIFY_TOKEN",
   "STRAVA_TOKEN_ENCRYPTION_KEY",
   "DATABASE_URL"
 ] as const;
@@ -42,7 +61,10 @@ export const sensitiveLogRedactionPaths = [
 export function createLoggerOptions(level: AppConfig["LOG_LEVEL"]) {
   return {
     level,
-    redact: [...sensitiveLogRedactionPaths]
+    redact: {
+      paths: [...sensitiveLogRedactionPaths],
+      censor: "[Redacted]"
+    }
   };
 }
 
