@@ -115,7 +115,13 @@ const seasonArchetypes: SeasonArchetypesResponse = {
 const fixtureData: ApiFixtureData = {
   activities: { data: [activity], pagination: { nextCursor: null } },
   stages: { data: [stage] },
-  recap: { riders: [rider] },
+  recap: {
+    stageId: "stage-001",
+    durationSeconds: 0,
+    riders: [rider],
+    markers: stage.orderedMarkers,
+    timeline: []
+  },
   stageResults,
   seasonStandings,
   seasonArchetypes
@@ -336,6 +342,10 @@ class InMemoryRepository implements ApplicationRepository {
     return stageId === stageResults.stageId ? stageResults : null;
   }
 
+  async getStageRecap(stageId: string) {
+    return stageId === fixtureData.recap.stageId ? fixtureData.recap : null;
+  }
+
   async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {
     return seasonId === seasonStandings.seasonId ? seasonStandings : null;
   }
@@ -484,8 +494,14 @@ describe("application use cases", () => {
 
     await expect(ownerUseCases.listGroupStages("group-001")).resolves.toEqual({ data: [stage] });
     await expect(memberUseCases.getStage("stage-001")).resolves.toEqual(stage);
+    await expect(memberUseCases.getStageRecap("stage-001")).resolves.toEqual(fixtureData.recap);
     await expect(ownerUseCases.getStage("missing")).resolves.toBeNull();
+    await expect(ownerUseCases.getStageRecap("missing")).resolves.toBeNull();
     await expect(outsiderUseCases.listGroupStages("group-001")).rejects.toMatchObject({
+      statusCode: 403,
+      code: "forbidden"
+    });
+    await expect(outsiderUseCases.getStageRecap("stage-001")).rejects.toMatchObject({
       statusCode: 403,
       code: "forbidden"
     });

@@ -341,11 +341,26 @@ describe("server repository-backed routes", () => {
       expect(detail.statusCode).toBe(200);
       expect(detail.json()).toMatchObject({ id: "stage-001", route: { distanceMeters: 42195 } });
 
+      const recap = await app.inject({ method: "GET", url: "/v1/stages/stage-001/recap", headers: userTwoAuth });
+      expect(recap.statusCode).toBe(200);
+      expect(recap.json()).toMatchObject({
+        stageId: "stage-001",
+        riders: expect.any(Array),
+        markers: expect.any(Array),
+        timeline: expect.any(Array)
+      });
+
       const missing = await app.inject({ method: "GET", url: "/v1/stages/missing", headers: userOneAuth });
       expect(missing.statusCode).toBe(404);
 
+      const missingRecap = await app.inject({ method: "GET", url: "/v1/stages/missing/recap", headers: userOneAuth });
+      expect(missingRecap.statusCode).toBe(404);
+
       const forbidden = await app.inject({ method: "GET", url: "/v1/groups/group-001/stages", headers: userThreeAuth });
       expect(forbidden.statusCode).toBe(403);
+
+      const forbiddenRecap = await app.inject({ method: "GET", url: "/v1/stages/stage-001/recap", headers: userThreeAuth });
+      expect(forbiddenRecap.statusCode).toBe(403);
     } finally {
       await app.close();
     }
