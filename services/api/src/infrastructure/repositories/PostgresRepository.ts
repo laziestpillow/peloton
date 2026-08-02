@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type {
   ActivitySyncStart,
   ActivityStageMatchInput,
@@ -28,11 +28,14 @@ import type {
   SeasonArchetypesResponse,
   SeasonStandingsResponse,
   Stage,
+  StageActivityResult,
+  StageRecap,
   StageResultsResponse,
   StageScore,
   StageMarkerCrossing
 } from "../../domain/models.js";
 import { materializeArchetypeSnapshots } from "../../domain/archetypes.js";
+import { materializeStageRecap } from "../../domain/recap.js";
 import { materializeSeasonStandings, materializeStageResults } from "../../domain/resultMaterialization.js";
 import type { Database } from "../database/client.js";
 import {
@@ -181,6 +184,16 @@ function toStageMarkerCrossing(row: typeof stageMarkerCrossings.$inferSelect): S
     crossedAtSeconds: row.crossedAtSeconds,
     rank: row.rank,
     points: row.points
+  };
+}
+
+function toStageActivityResult(row: typeof stageActivityResults.$inferSelect): StageActivityResult {
+  return {
+    stageId: row.stageId,
+    activityId: row.activityId,
+    riderId: row.riderId,
+    finishTimeSeconds: row.finishTimeSeconds,
+    matchedAt: toIsoString(row.matchedAt)
   };
 }
 
@@ -776,6 +789,57 @@ export class PostgresRepository implements ApplicationRepository {
         yellow: leaderBy((classification) => classification.gcTimeSeconds, "asc")
       }
     };
+  }
+
+  async getStageRecap(stageId: string): Promise<StageRecap | null> {
+    const stage = await this.getStage(stageId);
+    if (!stage) {
+      return null;
+    }
+
+    const [activityResultRows, crossingRows] = await Promise.all([
+      this.db.select().from(stageActivityResults).where(eq(stageActivityResults.stageId, stageId)),
+      this.db.select().from(stageMarkerCrossings).where(eq(stageMarkerCrossings.stageId, stageId)).orderBy(asc(stageMarkerCrossings.crossedAtSeconds))
+    ]);
+    const activityResults = activityResultRows.map(toStageActivityResult);
+    if (activityResults.length === 0) {
+      return materializeStageRecap({
+        stage,
+        riders: [],
+        activityResults,
+        samplesByActivityId: new Map(),
+        markerCrossings: crossingRows.map(toStageMarkerCrossing)
+      });
+    }
+
+    const riderIds = activityResults.map((result) => result.riderId);
+    const activityIds = activityResults.map((result) => result.activityId);
+    const [riderRows, sampleRows] = await Promise.all([
+      this.db.select().from(riderProfiles).where(inArray(riderProfiles.id, riderIds)),
+      this.db.select().from(activityStreamSamples).where(inArray(activityStreamSamples.activityId, activityIds)).orderBy(asc(activityStreamSamples.activityId), asc(activityStreamSamples.sequence))
+    ]);
+    const samplesByActivityId = new Map<string, ActivityStreamSample[]>();
+    for (const row of sampleRows) {
+      const samples = samplesByActivityId.get(row.activityId) ?? [];
+      samples.push({
+        sequence: row.sequence,
+        timeSeconds: row.timeSeconds,
+        distanceMeters: row.distanceMeters,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        altitudeMeters: row.altitudeMeters,
+        velocityMetersPerSecond: row.velocityMetersPerSecond
+      });
+      samplesByActivityId.set(row.activityId, samples);
+    }
+
+    return materializeStageRecap({
+      stage,
+      riders: riderRows.map(toRiderProfile),
+      activityResults,
+      samplesByActivityId,
+      markerCrossings: crossingRows.map(toStageMarkerCrossing)
+    });
   }
 
   async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {

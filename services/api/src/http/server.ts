@@ -304,9 +304,17 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
       return handleApplicationError(error, request, reply);
     }
   });
-  app.get("/v1/stages/:stageId/recap", async (request) => {
+  app.get<{ Params: { stageId: string } }>("/v1/stages/:stageId/recap", async (request, reply) => {
     const useCases = getUseCases(request);
-    return useCases.getStageRecap();
+    try {
+      const recap = await useCases.getStageRecap(request.params.stageId);
+      if (!recap) {
+        return sendError(request, reply, 404, "not_found", "Stage recap not found.");
+      }
+      return recap;
+    } catch (error) {
+      return handleApplicationError(error, request, reply);
+    }
   });
   app.get<{ Params: { stageId: string } }>("/v1/stages/:stageId/results", async (request, reply) => {
     const useCases = getUseCases(request);

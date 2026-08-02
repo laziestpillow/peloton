@@ -24,6 +24,7 @@ import type {
   SeasonStandingsResponse,
   Stage,
   StageActivityResult,
+  StageRecap,
   StageResultsResponse,
   StageMarkerCrossing
 } from "../../domain/models.js";
@@ -259,6 +260,10 @@ export class FixtureRepository implements ApplicationRepository {
 
   async getStageResults(stageId: string): Promise<StageResultsResponse | null> {
     return this.fixtureData.stageResults.stageId === stageId ? this.fixtureData.stageResults : null;
+  }
+
+  async getStageRecap(stageId: string): Promise<StageRecap | null> {
+    return this.fixtureData.recap.stageId === stageId ? this.fixtureData.recap : null;
   }
 
   async getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null> {

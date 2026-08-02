@@ -218,6 +218,26 @@ export interface StageMarkerCrossing {
   points: number;
 }
 
+export interface RiderTimelinePosition {
+  riderId: string;
+  positionMeters: number;
+  speedMetersPerSecond: number;
+  markerEventId: string | null;
+}
+
+export interface TimelineFrame {
+  timeSeconds: number;
+  positions: readonly RiderTimelinePosition[];
+}
+
+export interface StageRecap {
+  stageId: string;
+  durationSeconds: number;
+  riders: readonly RiderProfile[];
+  markers: readonly Marker[];
+  timeline: readonly TimelineFrame[];
+}
+
 export interface ArchetypeInput {
   riderId: string;
   sampleSize: number;

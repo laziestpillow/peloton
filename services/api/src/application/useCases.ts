@@ -11,6 +11,7 @@ import type {
   SeasonArchetypesResponse,
   SeasonStandingsResponse,
   Stage,
+  StageRecap,
   StageResultsResponse,
   StravaWebhookAction,
   StravaWebhookEvent,
@@ -138,6 +139,7 @@ export interface ApplicationRepository {
   listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]>;
   saveActivityStageMatch(input: ActivityStageMatchInput): Promise<void>;
   getStageResults(stageId: string): Promise<StageResultsResponse | null>;
+  getStageRecap(stageId: string): Promise<StageRecap | null>;
   getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
   getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null>;
   recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void>;
@@ -159,7 +161,7 @@ export interface ApplicationUseCases {
   refreshStravaConnection(): Promise<StravaConnection | null>;
   disconnectStrava(): Promise<void>;
   syncActivities(input?: { idempotencyKey?: string }): Promise<{ status: "accepted" | "alreadyRunning"; requestedAt: string }>;
-  getStageRecap(): Promise<unknown>;
+  getStageRecap(stageId: string): Promise<StageRecap | null>;
   getStageResults(stageId: string): Promise<StageResultsResponse | null>;
   getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
   getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null>;
@@ -183,7 +185,7 @@ export class ApplicationError extends Error {
 export function createApplicationUseCases(
   repository: ApplicationRepository,
   currentUserId: string,
-  fixtureData: ApiFixtureData,
+  _fixtureData: ApiFixtureData,
   services?: ApplicationServices
 ): ApplicationUseCases {
   const now = () => services?.now?.() ?? new Date();
@@ -555,7 +557,14 @@ export function createApplicationUseCases(
 
       return { status: sync.status, requestedAt: sync.requestedAt.toISOString() };
     },
-    getStageRecap: async () => fixtureData.recap,
+    async getStageRecap(stageId) {
+      const groupId = await repository.getStageGroupId(stageId);
+      if (!groupId) {
+        return null;
+      }
+      await requireGroupAccess(groupId);
+      return repository.getStageRecap(stageId);
+    },
     async getStageResults(stageId) {
       return repository.getStageResults(stageId);
     },
