@@ -22,7 +22,7 @@ import { matchActivityToStages } from "../domain/routeMatching.js";
 import { rankMarkerCrossings } from "../domain/scoring.js";
 import { actionForStravaWebhookEvent, parseStravaWebhookEvent } from "../domain/stravaWebhook.js";
 import { normalizeActivityStreams } from "../domain/streamNormalization.js";
-import type { StravaGateway } from "../infrastructure/strava/StravaGateway.js";
+import type { StravaActivitySummary, StravaGateway } from "../infrastructure/strava/StravaGateway.js";
 import type { TokenCipher } from "../infrastructure/strava/TokenCipher.js";
 
 export interface StravaOAuthState {
@@ -130,10 +130,12 @@ export interface ApplicationRepository {
   consumeStravaOAuthState(input: { state: string; consumedAt: Date }): Promise<void>;
   upsertStravaConnection(input: StravaConnectionInput): Promise<void>;
   getStravaConnection(userId: string): Promise<StravaConnection | null>;
+  getStravaConnectionByAthleteId(athleteId: string): Promise<StravaConnection | null>;
   updateStravaConnection(input: StravaConnectionUpdate): Promise<void>;
   beginActivitySync(input: { userId: string; idempotencyKey: string | null; requestedAt: Date }): Promise<ActivitySyncStart>;
   completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void>;
-  upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
+  upsertImportedActivity(input: ImportedActivityInput, options?: { replaceExisting?: boolean }): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
+  markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void>;
   replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void>;
   listMatchableStages(): Promise<readonly Stage[]>;
   listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]>;
@@ -142,7 +144,7 @@ export interface ApplicationRepository {
   getStageRecap(stageId: string): Promise<StageRecap | null>;
   getSeasonStandings(seasonId: string): Promise<SeasonStandingsResponse | null>;
   getSeasonArchetypes(seasonId: string): Promise<SeasonArchetypesResponse | null>;
-  recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void>;
+  recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<{ inserted: boolean }>;
 }
 
 export interface ApplicationUseCases {
@@ -311,10 +313,9 @@ export function createApplicationUseCases(
     });
   }
 
-  async function refreshStravaConnection(): Promise<StravaConnection | null> {
+  async function refreshConnection(connection: StravaConnection): Promise<StravaConnection | null> {
     const strava = requireStravaServices();
-    const connection = await repository.getStravaConnection(currentUserId);
-    if (!connection || connection.status === "revoked") {
+    if (connection.status === "revoked") {
       return null;
     }
     if (connection.accessTokenExpiresAt.getTime() - now().getTime() > refreshThresholdMs) {
@@ -340,6 +341,65 @@ export function createApplicationUseCases(
       const erroredConnection: StravaConnection = { ...connection, status: "error" };
       await repository.updateStravaConnection(erroredConnection);
       return erroredConnection;
+    }
+  }
+
+  async function refreshStravaConnection(): Promise<StravaConnection | null> {
+    const connection = await repository.getStravaConnection(currentUserId);
+    return connection ? refreshConnection(connection) : null;
+  }
+
+  async function importStravaActivityForUser(input: {
+    userId: string;
+    connection: StravaConnection;
+    activity: StravaActivitySummary;
+    replaceExisting?: boolean;
+  }): Promise<void> {
+    const strava = requireStravaServices();
+    const rider = await repository.getCurrentRider(input.userId);
+    if (!rider) {
+      throw new ApplicationError(404, "not_found", "Current rider was not found.");
+    }
+
+    const supported = isSupportedRide(input.activity.sportType);
+    let routeSummary = emptyRouteSummary(input.activity.polyline);
+    let importStatus: ImportedActivity["importStatus"] = supported ? "eligible" : "unsupported";
+    let samples: readonly ActivityStreamSample[] = [];
+
+    if (supported) {
+      try {
+        const streams = await strava.stravaGateway.getActivityStreams({
+          accessToken: strava.tokenCipher.decrypt(input.connection.encryptedAccessToken),
+          providerActivityId: input.activity.providerActivityId
+        });
+        const normalized = normalizeActivityStreams(streams, input.activity.polyline);
+        routeSummary = normalized.routeSummary;
+        samples = normalized.samples;
+      } catch {
+        importStatus = "failed";
+      }
+    }
+
+    const imported = await repository.upsertImportedActivity({
+      riderId: rider.id,
+      provider: "strava",
+      providerActivityId: input.activity.providerActivityId,
+      activityType: "ride",
+      startedAt: new Date(input.activity.startedAt),
+      distanceMeters: input.activity.distanceMeters,
+      elapsedTimeSeconds: input.activity.elapsedTimeSeconds,
+      movingTimeSeconds: input.activity.movingTimeSeconds,
+      elevationGainMeters: input.activity.elevationGainMeters,
+      routeSummary,
+      importStatus,
+      processedStageId: null
+    }, input.replaceExisting ? { replaceExisting: true } : undefined);
+
+    if ((!imported.duplicate || input.replaceExisting) && samples.length > 0) {
+      await repository.replaceActivityStreamSamples({ activityId: imported.activity.id, samples });
+      if (imported.activity.importStatus === "eligible") {
+        await matchAndPersistActivity(imported.activity, samples);
+      }
     }
   }
 
@@ -482,7 +542,7 @@ export function createApplicationUseCases(
     },
     async syncActivities(input) {
       const strava = requireStravaServices();
-      const rider = await getCurrentRiderOrThrow();
+      await getCurrentRiderOrThrow();
       const requestedAt = now();
       const sync = await repository.beginActivitySync({
         userId: currentUserId,
@@ -499,48 +559,11 @@ export function createApplicationUseCases(
           throw new ApplicationError(400, "bad_request", "Strava is not connected.");
         }
 
-        const accessToken = strava.tokenCipher.decrypt(connection.encryptedAccessToken);
-        const activities = await strava.stravaGateway.listRecentActivities({ accessToken });
+        const activities = await strava.stravaGateway.listRecentActivities({
+          accessToken: strava.tokenCipher.decrypt(connection.encryptedAccessToken)
+        });
         for (const activity of activities) {
-          const supported = isSupportedRide(activity.sportType);
-          let routeSummary = emptyRouteSummary(activity.polyline);
-          let importStatus: ImportedActivity["importStatus"] = supported ? "eligible" : "unsupported";
-          let samples: readonly ActivityStreamSample[] = [];
-
-          if (supported) {
-            try {
-              const streams = await strava.stravaGateway.getActivityStreams({
-                accessToken,
-                providerActivityId: activity.providerActivityId
-              });
-              const normalized = normalizeActivityStreams(streams, activity.polyline);
-              routeSummary = normalized.routeSummary;
-              samples = normalized.samples;
-            } catch {
-              importStatus = "failed";
-            }
-          }
-
-          const imported = await repository.upsertImportedActivity({
-            riderId: rider.id,
-            provider: "strava",
-            providerActivityId: activity.providerActivityId,
-            activityType: "ride",
-            startedAt: new Date(activity.startedAt),
-            distanceMeters: activity.distanceMeters,
-            elapsedTimeSeconds: activity.elapsedTimeSeconds,
-            movingTimeSeconds: activity.movingTimeSeconds,
-            elevationGainMeters: activity.elevationGainMeters,
-            routeSummary,
-            importStatus,
-            processedStageId: null
-          });
-          if (!imported.duplicate && samples.length > 0) {
-            await repository.replaceActivityStreamSamples({ activityId: imported.activity.id, samples });
-            if (imported.activity.importStatus === "eligible") {
-              await matchAndPersistActivity(imported.activity, samples);
-            }
-          }
+          await importStravaActivityForUser({ userId: currentUserId, connection, activity });
         }
 
         const completedAt = now();
@@ -588,11 +611,52 @@ export function createApplicationUseCases(
       } catch {
         throw new ApplicationError(400, "bad_request", "Invalid Strava webhook event payload.");
       }
-      await repository.recordStravaWebhookEvent({
+      const recorded = await repository.recordStravaWebhookEvent({
         event,
         action: actionForStravaWebhookEvent(event),
         receivedAt: now()
       });
+      if (!recorded.inserted) {
+        return { status: "accepted" };
+      }
+
+      if (event.objectType === "activity" && (event.aspectType === "create" || event.aspectType === "update")) {
+        const strava = requireStravaServices();
+        const existingConnection = await repository.getStravaConnectionByAthleteId(event.ownerId);
+        const connection = existingConnection ? await refreshConnection(existingConnection) : null;
+        if (!connection || connection.status !== "connected") {
+          return { status: "accepted" };
+        }
+        const activity = await strava.stravaGateway.getActivity({
+          accessToken: strava.tokenCipher.decrypt(connection.encryptedAccessToken),
+          providerActivityId: event.objectId
+        });
+        if (activity) {
+          await importStravaActivityForUser({
+            userId: connection.userId,
+            connection,
+            activity,
+            replaceExisting: true
+          });
+          await repository.updateStravaConnection({ ...connection, lastSyncedAt: now(), status: "connected" });
+        } else {
+          await repository.markImportedActivityDeleted({ provider: "strava", providerActivityId: event.objectId });
+        }
+      } else if (event.objectType === "activity" && event.aspectType === "delete") {
+        await repository.markImportedActivityDeleted({ provider: "strava", providerActivityId: event.objectId });
+      } else if (event.objectType === "athlete" && event.updates.authorized === "false") {
+        const strava = requireStravaServices();
+        const connection = await repository.getStravaConnectionByAthleteId(event.ownerId);
+        if (connection && connection.status !== "revoked") {
+          await repository.updateStravaConnection({
+            ...connection,
+            encryptedAccessToken: strava.tokenCipher.encrypt("revoked"),
+            encryptedRefreshToken: strava.tokenCipher.encrypt("revoked"),
+            accessTokenExpiresAt: now(),
+            status: "revoked"
+          });
+        }
+      }
       return { status: "accepted" };
     },
     async listStravaWebhookSubscriptions() {

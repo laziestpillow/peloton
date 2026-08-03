@@ -45,6 +45,11 @@ public struct ActivityListResponse: Codable, Equatable, Sendable {
   public let pagination: Pagination
 }
 
+public struct ActivitySyncResponse: Codable, Equatable, Sendable {
+  public let status: String
+  public let requestedAt: Date
+}
+
 public struct Pagination: Codable, Equatable, Sendable {
   public let nextCursor: String?
 }
@@ -78,6 +83,57 @@ public struct PreviewBounds: Codable, Equatable, Sendable {
 public struct GeoPoint: Codable, Equatable, Sendable {
   public let latitude: Double
   public let longitude: Double
+}
+
+public struct StravaAuthorizationStart: Codable, Equatable, Sendable {
+  public let authorizationUrl: URL
+  public let stateExpiresAt: Date
+}
+
+public struct StravaIntegrationStatus: Codable, Equatable, Sendable {
+  public let status: String
+  public let acceptedScopes: [String]
+  public let lastSyncedAt: Date?
+}
+
+public struct Group: Codable, Identifiable, Equatable, Sendable {
+  public let id: String
+  public let name: String
+  public let ownerId: String
+  public let createdAt: Date
+  public let updatedAt: Date
+}
+
+public struct GroupMembership: Codable, Equatable, Sendable {
+  public let groupId: String
+  public let riderId: String
+  public let role: String
+  public let status: String
+  public let joinedAt: Date
+}
+
+public struct StageListResponse: Codable, Equatable, Sendable {
+  public let data: [Stage]
+}
+
+public struct Stage: Codable, Identifiable, Equatable, Sendable {
+  public let id: String
+  public let seasonId: String
+  public let name: String
+  public let route: RouteProfile
+  public let orderedMarkers: [Marker]
+  public let scheduledAt: Date
+  public let status: String
+}
+
+public struct RouteProfile: Codable, Equatable, Sendable {
+  public let distanceMeters: Double
+  public let elevation: [RouteElevationPoint]
+}
+
+public struct RouteElevationPoint: Codable, Equatable, Sendable {
+  public let positionMeters: Double
+  public let altitudeMeters: Double
 }
 
 public struct StageRecap: Codable, Equatable, Sendable {
@@ -160,3 +216,30 @@ public struct SeasonStanding: Codable, Equatable, Sendable {
   public let previousRank: Int?
 }
 
+public struct SeasonArchetypesResponse: Codable, Equatable, Sendable {
+  public let data: [ArchetypeSnapshot]
+}
+
+public struct ArchetypeSnapshot: Codable, Equatable, Sendable {
+  public let seasonId: String
+  public let riderId: String
+  public let archetype: String
+  public let confidence: Double
+  public let sampleSize: Int
+  public let sprintRelativeScore: Double
+  public let climbRelativeScore: Double
+  public let shortEffortScore: Double
+  public let sustainedEffortScore: Double
+  public let effectiveAt: Date
+  public let reasons: [String]
+}
+
+public struct ErrorResponse: Codable, Equatable, Sendable {
+  public let error: APIErrorDetail
+}
+
+public struct APIErrorDetail: Codable, Equatable, Sendable {
+  public let code: String
+  public let message: String
+  public let requestId: String?
+}

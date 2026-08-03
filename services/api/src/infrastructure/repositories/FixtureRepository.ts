@@ -152,6 +152,10 @@ export class FixtureRepository implements ApplicationRepository {
     return this.stravaConnections.get(userId) ?? null;
   }
 
+  async getStravaConnectionByAthleteId(athleteId: string): Promise<StravaConnection | null> {
+    return Array.from(this.stravaConnections.values()).find((connection) => connection.athleteId === athleteId) ?? null;
+  }
+
   async updateStravaConnection(input: StravaConnectionUpdate): Promise<void> {
     const existing = this.stravaConnections.get(input.userId);
     this.stravaConnections.set(input.userId, {
@@ -192,10 +196,27 @@ export class FixtureRepository implements ApplicationRepository {
     }
   }
 
-  async upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
+  async upsertImportedActivity(input: ImportedActivityInput, options: { replaceExisting?: boolean } = {}): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
     const providerKey = `${input.provider}:${input.providerActivityId}`;
     const existing = this.stravaActivities.get(providerKey);
     if (existing) {
+      if (options.replaceExisting) {
+        const activity: ImportedActivity = {
+          ...existing,
+          riderId: input.riderId,
+          activityType: input.activityType,
+          startedAt: input.startedAt.toISOString(),
+          distanceMeters: input.distanceMeters,
+          elapsedTimeSeconds: input.elapsedTimeSeconds,
+          movingTimeSeconds: input.movingTimeSeconds,
+          elevationGainMeters: input.elevationGainMeters,
+          routeSummary: input.routeSummary,
+          importStatus: input.importStatus,
+          processedStageId: input.processedStageId
+        };
+        this.stravaActivities.set(providerKey, activity);
+        return { activity, duplicate: false };
+      }
       const duplicate = { ...existing, importStatus: "duplicate" as const };
       this.stravaActivities.set(providerKey, duplicate);
       return { activity: duplicate, duplicate: true };
@@ -218,6 +239,14 @@ export class FixtureRepository implements ApplicationRepository {
     };
     this.stravaActivities.set(providerKey, activity);
     return { activity, duplicate: false };
+  }
+
+  async markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void> {
+    const providerKey = `${input.provider}:${input.providerActivityId}`;
+    const existing = this.stravaActivities.get(providerKey);
+    if (existing) {
+      this.stravaActivities.set(providerKey, { ...existing, importStatus: "failed" });
+    }
   }
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
@@ -275,7 +304,17 @@ export class FixtureRepository implements ApplicationRepository {
     return data.length > 0 ? { data } : null;
   }
 
-  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void> {
-    this.stravaWebhookEvents.push(input);
+  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<{ inserted: boolean }> {
+    const duplicate = this.stravaWebhookEvents.some((event) =>
+      event.event.subscriptionId === input.event.subscriptionId &&
+      event.event.objectType === input.event.objectType &&
+      event.event.objectId === input.event.objectId &&
+      event.event.aspectType === input.event.aspectType &&
+      event.event.eventTime.getTime() === input.event.eventTime.getTime()
+    );
+    if (!duplicate) {
+      this.stravaWebhookEvents.push(input);
+    }
+    return { inserted: !duplicate };
   }
 }

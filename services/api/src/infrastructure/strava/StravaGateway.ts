@@ -47,6 +47,7 @@ export interface StravaGateway {
     acceptedScope?: string;
   }): Promise<StravaTokenExchange>;
   listRecentActivities(input: { accessToken: string }): Promise<readonly StravaActivitySummary[]>;
+  getActivity(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivitySummary | null>;
   getActivityStreams(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivityStreams>;
   refreshAccessToken(input: {
     clientId: string;
@@ -209,6 +210,43 @@ export class HttpStravaGateway implements StravaGateway {
         ...(polyline ? { polyline } : {})
       };
     });
+  }
+
+  async getActivity(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivitySummary | null> {
+    const response = await fetch(`https://www.strava.com/api/v3/activities/${encodeURIComponent(input.providerActivityId)}`, {
+      headers: { authorization: `Bearer ${input.accessToken}` }
+    });
+
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`Strava activity fetch failed with status ${response.status}.`);
+    }
+
+    const activity = await response.json() as {
+      id?: unknown;
+      sport_type?: unknown;
+      type?: unknown;
+      start_date?: unknown;
+      distance?: unknown;
+      elapsed_time?: unknown;
+      moving_time?: unknown;
+      total_elevation_gain?: unknown;
+      map?: { summary_polyline?: unknown };
+    };
+    const sportType = optionalString(activity.sport_type) ?? optionalString(activity.type);
+    const polyline = optionalString(activity.map?.summary_polyline);
+    return {
+      providerActivityId: String(requireNumber(activity.id, "id")),
+      ...(sportType ? { sportType } : {}),
+      startedAt: requireString(activity.start_date, "start_date"),
+      distanceMeters: requireNumber(activity.distance, "distance"),
+      elapsedTimeSeconds: requireNumber(activity.elapsed_time, "elapsed_time"),
+      movingTimeSeconds: requireNumber(activity.moving_time, "moving_time"),
+      elevationGainMeters: requireNumber(activity.total_elevation_gain, "total_elevation_gain"),
+      ...(polyline ? { polyline } : {})
+    };
   }
 
   async getActivityStreams(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivityStreams> {
