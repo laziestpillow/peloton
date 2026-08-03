@@ -15,6 +15,7 @@ Open `apps/ios/Peloton.xcodeproj` in Xcode. Use `fixture` mode for the default l
 Database migration and seed commands refuse production targets by default. Set `ALLOW_LIVE_DATABASE_TASKS=true` only for an intentional live migration or seed operation after verifying `DATABASE_URL`.
 
 For staging verification, use `docs/staging-smoke-checklist.md`.
+See `docs/backend-operations.md` for live backend environment requirements, migration handling, and CI-safe checks.
 
 ## Stage Catalog Import
 

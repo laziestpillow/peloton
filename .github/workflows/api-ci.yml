@@ -37,3 +37,7 @@ jobs:
       - run: pnpm --filter @peloton/api lint
       - run: pnpm --filter @peloton/api test
       - run: pnpm --filter @peloton/api build
+      - run: pnpm --filter @peloton/api contract:check
+      - run: pnpm --filter @peloton/api db:migrate
+        env:
+          DATABASE_URL: postgres://peloton:peloton@127.0.0.1:5432/peloton

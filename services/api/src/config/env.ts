@@ -7,17 +7,29 @@ const envBoolean = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const defaultFixtureAuthTokens = "user-001:dev-token-user-001,user-002:dev-token-user-002,user-003:dev-token-user-003";
+const defaultDatabaseUrl = "postgres://peloton:peloton@127.0.0.1:5432/peloton";
+const defaultTokenEncryptionKey = "0000000000000000000000000000000000000000000000000000000000000000";
+
+function isLocalHostname(hostname: string): boolean {
+  return ["127.0.0.1", "localhost", "::1"].includes(hostname);
+}
+
+function isLocalDatabaseUrl(value: string): boolean {
+  return isLocalHostname(new URL(value).hostname);
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["test", "development", "staging", "production"]).default("development"),
   DATA_SOURCE: z.enum(["fixture", "postgres"]).default("postgres"),
   AUTH_MODE: z.enum(["fixture", "disabled"]).default("fixture"),
-  FIXTURE_AUTH_TOKENS: z.string().default("user-001:dev-token-user-001,user-002:dev-token-user-002,user-003:dev-token-user-003"),
+  FIXTURE_AUTH_TOKENS: z.string().default(defaultFixtureAuthTokens),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
   CURRENT_USER_ID: z.string().default("user-001"),
   API_HOST: z.string().default("127.0.0.1"),
   API_PORT: z.coerce.number().int().positive().default(8080),
-  DATABASE_URL: z.string().url().default("postgres://peloton:peloton@127.0.0.1:5432/peloton"),
+  DATABASE_URL: z.string().url().default(defaultDatabaseUrl),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   STRAVA_CLIENT_ID: z.string().optional(),
   STRAVA_CLIENT_SECRET: z.string().optional(),
@@ -26,7 +38,7 @@ const envSchema = z.object({
   STRAVA_WEBHOOK_VERIFY_TOKEN: z.string().default(""),
   STRAVA_OAUTH_SCOPE: z.string().default("read,activity:read_all"),
   STRAVA_OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
-  STRAVA_TOKEN_ENCRYPTION_KEY: z.string().default("0000000000000000000000000000000000000000000000000000000000000000"),
+  STRAVA_TOKEN_ENCRYPTION_KEY: z.string().default(defaultTokenEncryptionKey),
   APP_DEEP_LINK_URL: z.string().default("peloton://strava/callback"),
   ALLOW_LIVE_DATABASE_TASKS: envBoolean.default(false)
 }).superRefine((value, context) => {
@@ -44,11 +56,53 @@ const envSchema = z.object({
     }
   }
 
+  if (value.AUTH_MODE === "disabled") {
+    context.addIssue({
+      code: "custom",
+      path: ["AUTH_MODE"],
+      message: `AUTH_MODE=disabled is not allowed in ${value.NODE_ENV}.`
+    });
+  }
+
+  if (value.FIXTURE_AUTH_TOKENS === defaultFixtureAuthTokens) {
+    context.addIssue({
+      code: "custom",
+      path: ["FIXTURE_AUTH_TOKENS"],
+      message: `Default fixture bearer tokens are not allowed in ${value.NODE_ENV}.`
+    });
+  }
+
+  if (value.DATABASE_URL === defaultDatabaseUrl || isLocalDatabaseUrl(value.DATABASE_URL)) {
+    context.addIssue({
+      code: "custom",
+      path: ["DATABASE_URL"],
+      message: `DATABASE_URL must point to a non-local database in ${value.NODE_ENV}.`
+    });
+  }
+
+  for (const key of ["STRAVA_CALLBACK_URL", "STRAVA_WEBHOOK_CALLBACK_URL"] as const) {
+    if (isLocalHostname(new URL(value[key]).hostname)) {
+      context.addIssue({
+        code: "custom",
+        path: [key],
+        message: `${key} must not point to localhost in ${value.NODE_ENV}.`
+      });
+    }
+  }
+
   if (!/^[0-9a-fA-F]{64}$/u.test(value.STRAVA_TOKEN_ENCRYPTION_KEY)) {
     context.addIssue({
       code: "custom",
       path: ["STRAVA_TOKEN_ENCRYPTION_KEY"],
       message: "STRAVA_TOKEN_ENCRYPTION_KEY must be a 32-byte hex string in live environments."
+    });
+  }
+
+  if (value.STRAVA_TOKEN_ENCRYPTION_KEY === defaultTokenEncryptionKey) {
+    context.addIssue({
+      code: "custom",
+      path: ["STRAVA_TOKEN_ENCRYPTION_KEY"],
+      message: "Default STRAVA_TOKEN_ENCRYPTION_KEY is not allowed in live environments."
     });
   }
 });
