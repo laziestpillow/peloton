@@ -33,7 +33,7 @@ struct ActivitiesView: View {
                 HStack {
                   VStack(alignment: .leading, spacing: 4) {
                     Text(stage.name).font(.headline)
-                    Text("\(stage.route.distanceMeters.kilometers) km · \(stage.status.capitalized)")
+                    Text("\(stage.route.distanceMeters.kilometers) km - \(stage.status.capitalized)")
                       .font(.subheadline)
                       .foregroundStyle(.secondary)
                   }
@@ -60,7 +60,7 @@ struct ActivitiesView: View {
                   Spacer()
                   Text(activity.importStatus.capitalized).font(.caption).foregroundStyle(.secondary)
                 }
-                Text("\(activity.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(activity.distanceMeters.kilometers) km · \(Int(activity.elevationGainMeters)) m elevation")
+                Text("\(activity.startedAt.formatted(date: .abbreviated, time: .shortened)) - \(activity.distanceMeters.kilometers) km - \(Int(activity.elevationGainMeters)) m elevation")
                   .font(.subheadline)
                   .foregroundStyle(.secondary)
               }

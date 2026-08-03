@@ -18,7 +18,7 @@ struct ResultsView: View {
               ResultRow(
                 rank: rank(for: classification),
                 rider: riderName(classification.riderId),
-                detail: "\(classification.todayTotal) pts · \(classification.gcTimeSeconds.duration)"
+                detail: "\(classification.todayTotal) pts - \(classification.gcTimeSeconds.duration)"
               )
             }
           }
@@ -29,7 +29,7 @@ struct ResultsView: View {
                 ResultRow(
                   rank: crossing.rank,
                   rider: riderName(crossing.riderId),
-                  detail: "\(marker.type.uppercased()) · \(crossing.points) pts · \(crossing.crossedAtSeconds.duration)"
+                  detail: "\(marker.type.uppercased()) - \(crossing.points) pts - \(crossing.crossedAtSeconds.duration)"
                 )
               }
             }
@@ -40,7 +40,7 @@ struct ResultsView: View {
               ResultRow(
                 rank: standing.rank,
                 rider: riderName(standing.riderId),
-                detail: "\(standing.seasonTotal) pts · \(archetype(for: standing.riderId))"
+                detail: "\(standing.seasonTotal) pts - \(archetype(for: standing.riderId))"
               )
             }
           }
@@ -71,7 +71,7 @@ struct ResultsView: View {
     guard let snapshot = store.archetypes?.data.first(where: { $0.riderId == riderId }) else {
       return "Pending archetype"
     }
-    return "\(snapshot.archetype.capitalized) · \(Int(snapshot.confidence * 100))% confidence"
+    return "\(snapshot.archetype.capitalized) - \(Int(snapshot.confidence * 100))% confidence"
   }
 }
 

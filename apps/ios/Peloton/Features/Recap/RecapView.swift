@@ -24,7 +24,7 @@ struct RecapView: View {
                 Rectangle()
                   .fill(marker.type == "climb" ? .red : .yellow)
                   .frame(width: 4)
-                  .offset(x: proxy.size.width * marker.positionMeters / max(stage.route.distanceMeters, 1))
+                  .offset(x: proxy.size.width * CGFloat(marker.positionMeters / max(stage.route.distanceMeters, 1)))
               }
 
               ForEach(currentFrame?.positions ?? [], id: \.riderId) { position in
@@ -32,7 +32,7 @@ struct RecapView: View {
                   RiderAvatarView(appearance: rider.appearance)
                     .scaleEffect(0.42)
                     .offset(
-                      x: proxy.size.width * position.positionMeters / max(stage.route.distanceMeters, 1) - 50,
+                      x: proxy.size.width * CGFloat(position.positionMeters / max(stage.route.distanceMeters, 1)) - 50,
                       y: -44 - CGFloat(recap.riders.firstIndex(where: { $0.id == rider.id }) ?? 0) * 16
                     )
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: timeSeconds)
@@ -115,9 +115,9 @@ struct ElevationProfile: Shape {
     var path = Path()
     path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
     for point in points {
-      let x = rect.minX + rect.width * point.positionMeters / maxPosition
+      let x = rect.minX + rect.width * CGFloat(point.positionMeters / maxPosition)
       let altitudeRatio = (point.altitudeMeters - minAltitude) / (maxAltitude - minAltitude)
-      let y = rect.maxY - rect.height * 0.8 * altitudeRatio - 20
+      let y = rect.maxY - rect.height * 0.8 * CGFloat(altitudeRatio) - 20
       path.addLine(to: CGPoint(x: x, y: y))
     }
     path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
