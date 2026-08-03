@@ -485,6 +485,11 @@ export class PostgresRepository implements ApplicationRepository {
     return row ? toStravaConnection(row) : null;
   }
 
+  async getStravaConnectionByAthleteId(athleteId: string): Promise<StravaConnection | null> {
+    const [row] = await this.db.select().from(stravaConnections).where(eq(stravaConnections.athleteId, athleteId)).limit(1);
+    return row ? toStravaConnection(row) : null;
+  }
+
   async updateStravaConnection(input: StravaConnectionUpdate): Promise<void> {
     await this.db
       .update(stravaConnections)
@@ -541,7 +546,7 @@ export class PostgresRepository implements ApplicationRepository {
       .where(and(eq(activitySyncRequests.id, input.syncId), eq(activitySyncRequests.userId, input.userId)));
   }
 
-  async upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
+  async upsertImportedActivity(input: ImportedActivityInput, options: { replaceExisting?: boolean } = {}): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
     const [existing] = await this.db
       .select()
       .from(importedActivities)
@@ -549,6 +554,28 @@ export class PostgresRepository implements ApplicationRepository {
       .limit(1);
 
     if (existing) {
+      if (options.replaceExisting) {
+        const [row] = await this.db
+          .update(importedActivities)
+          .set({
+            riderId: input.riderId,
+            activityType: input.activityType,
+            startedAt: input.startedAt,
+            distanceMeters: input.distanceMeters,
+            elapsedTimeSeconds: input.elapsedTimeSeconds,
+            movingTimeSeconds: input.movingTimeSeconds,
+            elevationGainMeters: input.elevationGainMeters,
+            routeSummary: input.routeSummary,
+            importStatus: input.importStatus,
+            processedStageId: input.processedStageId
+          })
+          .where(eq(importedActivities.id, existing.id))
+          .returning();
+        if (!row) {
+          throw new Error("Imported activity replacement update did not return a row.");
+        }
+        return { activity: toImportedActivity(row), duplicate: false };
+      }
       const [row] = await this.db
         .update(importedActivities)
         .set({ importStatus: "duplicate" })
@@ -582,6 +609,13 @@ export class PostgresRepository implements ApplicationRepository {
       throw new Error("Imported activity insert did not return a row.");
     }
     return { activity: toImportedActivity(row), duplicate: false };
+  }
+
+  async markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void> {
+    await this.db
+      .update(importedActivities)
+      .set({ importStatus: "failed" })
+      .where(and(eq(importedActivities.provider, input.provider), eq(importedActivities.providerActivityId, input.providerActivityId)));
   }
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
@@ -869,8 +903,8 @@ export class PostgresRepository implements ApplicationRepository {
     return { data: rows.map(toArchetypeSnapshot) };
   }
 
-  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void> {
-    await this.db
+  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<{ inserted: boolean }> {
+    const rows = await this.db
       .insert(stravaWebhookEvents)
       .values({
         id: `strava-webhook-${randomUUID()}`,
@@ -884,6 +918,8 @@ export class PostgresRepository implements ApplicationRepository {
         action: input.action,
         receivedAt: input.receivedAt
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: stravaWebhookEvents.id });
+    return { inserted: rows.length > 0 };
   }
 }

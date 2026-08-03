@@ -239,6 +239,10 @@ class InMemoryRepository implements ApplicationRepository {
     return this.stravaConnections.get(userId) ?? null;
   }
 
+  async getStravaConnectionByAthleteId(athleteId: string): Promise<StravaConnection | null> {
+    return Array.from(this.stravaConnections.values()).find((connection) => connection.athleteId === athleteId) ?? null;
+  }
+
   async updateStravaConnection(input: StravaConnectionUpdate): Promise<void> {
     const existing = this.stravaConnections.get(input.userId);
     this.stravaConnections.set(input.userId, { ...input, lastSyncedAt: input.lastSyncedAt !== undefined ? input.lastSyncedAt : existing?.lastSyncedAt ?? null });
@@ -276,9 +280,26 @@ class InMemoryRepository implements ApplicationRepository {
     }
   }
 
-  async upsertImportedActivity(input: ImportedActivityInput): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
+  async upsertImportedActivity(input: ImportedActivityInput, options: { replaceExisting?: boolean } = {}): Promise<{ activity: ImportedActivity; duplicate: boolean }> {
     const existing = this.activities.get(input.providerActivityId);
     if (existing) {
+      if (options.replaceExisting) {
+        const updated = {
+          ...existing,
+          riderId: input.riderId,
+          activityType: input.activityType,
+          startedAt: input.startedAt.toISOString(),
+          distanceMeters: input.distanceMeters,
+          elapsedTimeSeconds: input.elapsedTimeSeconds,
+          movingTimeSeconds: input.movingTimeSeconds,
+          elevationGainMeters: input.elevationGainMeters,
+          routeSummary: input.routeSummary,
+          importStatus: input.importStatus,
+          processedStageId: input.processedStageId
+        };
+        this.activities.set(input.providerActivityId, updated);
+        return { activity: updated, duplicate: false };
+      }
       const duplicate = { ...existing, importStatus: "duplicate" as const };
       this.activities.set(input.providerActivityId, duplicate);
       return { activity: duplicate, duplicate: true };
@@ -300,6 +321,13 @@ class InMemoryRepository implements ApplicationRepository {
     };
     this.activities.set(input.providerActivityId, imported);
     return { activity: imported, duplicate: false };
+  }
+
+  async markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void> {
+    const existing = this.activities.get(input.providerActivityId);
+    if (existing && existing.provider === input.provider) {
+      this.activities.set(input.providerActivityId, { ...existing, importStatus: "failed" });
+    }
   }
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
@@ -354,8 +382,18 @@ class InMemoryRepository implements ApplicationRepository {
     return seasonId === "season-001" ? seasonArchetypes : null;
   }
 
-  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<void> {
-    this.stravaWebhookEvents.push(input);
+  async recordStravaWebhookEvent(input: StravaWebhookEventInput): Promise<{ inserted: boolean }> {
+    const duplicate = this.stravaWebhookEvents.some((event) =>
+      event.event.subscriptionId === input.event.subscriptionId &&
+      event.event.objectType === input.event.objectType &&
+      event.event.objectId === input.event.objectId &&
+      event.event.aspectType === input.event.aspectType &&
+      event.event.eventTime.getTime() === input.event.eventTime.getTime()
+    );
+    if (!duplicate) {
+      this.stravaWebhookEvents.push(input);
+    }
+    return { inserted: !duplicate };
   }
 }
 
@@ -376,6 +414,10 @@ class RecordingGateway implements StravaGateway {
 
   async listRecentActivities(): Promise<readonly []> {
     return [];
+  }
+
+  async getActivity(): Promise<null> {
+    return null;
   }
 
   async getActivityStreams(): Promise<StravaActivityStreams> {
@@ -824,5 +866,102 @@ describe("application use cases", () => {
     });
     await useCases.deleteStravaWebhookSubscription(1);
     expect(gateway.deletedWebhookSubscriptionId).toBe(1);
+  });
+
+  test("processes activity webhook create and update events with targeted imports", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection({ athleteId: "134815" }));
+    const gateway = new MockStravaGateway([
+      {
+        providerActivityId: "1360128428",
+        sportType: "Ride",
+        startedAt: "2026-07-18T07:30:00Z",
+        distanceMeters: 42195,
+        elapsedTimeSeconds: 3700,
+        movingTimeSeconds: 3500,
+        elevationGainMeters: 500,
+        polyline: "webhook_polyline"
+      }
+    ], new Map([
+      ["1360128428", {
+        time: [0, 120, 1000],
+        distance: [0, 12000, 42195],
+        latlng: [
+          [41.38, 2.15],
+          [41.39, 2.16],
+          [41.46, 2.22]
+        ],
+        altitude: [32, 36, 90],
+        velocitySmooth: [0, 8.2, 9.1]
+      }]
+    ]));
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    const payload = {
+      object_type: "activity",
+      object_id: 1360128428,
+      aspect_type: "create",
+      owner_id: 134815,
+      subscription_id: 120475,
+      event_time: 1516126040
+    };
+    await expect(useCases.receiveStravaWebhook(payload)).resolves.toEqual({ status: "accepted" });
+    await expect(useCases.receiveStravaWebhook(payload)).resolves.toEqual({ status: "accepted" });
+
+    expect(repository.stravaWebhookEvents).toHaveLength(1);
+    expect(repository.activities.get("1360128428")).toMatchObject({
+      provider: "strava",
+      importStatus: "processing",
+      movingTimeSeconds: 3500,
+      processedStageId: "stage-001"
+    });
+    expect(repository.stravaConnections.get("user-001")?.lastSyncedAt).toEqual(new Date("2026-07-31T10:00:00.000Z"));
+  });
+
+  test("processes activity delete and athlete deauthorization webhook events", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection({ athleteId: "134815" }));
+    await repository.upsertImportedActivity({
+      riderId: "rider-001",
+      provider: "strava",
+      providerActivityId: "1360128428",
+      activityType: "ride",
+      startedAt: new Date("2026-07-18T07:30:00.000Z"),
+      distanceMeters: 42195,
+      elapsedTimeSeconds: 3700,
+      movingTimeSeconds: 3500,
+      elevationGainMeters: 500,
+      routeSummary: activity.routeSummary,
+      importStatus: "processed",
+      processedStageId: "stage-001"
+    });
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices());
+
+    await useCases.receiveStravaWebhook({
+      object_type: "activity",
+      object_id: 1360128428,
+      aspect_type: "delete",
+      owner_id: 134815,
+      subscription_id: 120475,
+      event_time: 1516126040
+    });
+    expect(repository.activities.get("1360128428")).toMatchObject({
+      importStatus: "failed",
+      processedStageId: "stage-001"
+    });
+
+    await useCases.receiveStravaWebhook({
+      object_type: "athlete",
+      object_id: 134815,
+      aspect_type: "update",
+      owner_id: 134815,
+      subscription_id: 120475,
+      event_time: 1516126041,
+      updates: { authorized: "false" }
+    });
+    const connection = repository.stravaConnections.get("user-001");
+    expect(connection).toMatchObject({ status: "revoked" });
+    expect(tokenCipher.decrypt(connection?.encryptedAccessToken ?? "")).toBe("revoked");
+    expect(tokenCipher.decrypt(connection?.encryptedRefreshToken ?? "")).toBe("revoked");
   });
 });

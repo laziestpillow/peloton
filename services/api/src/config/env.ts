@@ -113,7 +113,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   return envSchema.parse(source);
 }
 
-export function assertSafeDatabaseTask(config: AppConfig, taskName: "migration" | "seed"): void {
+export function assertSafeDatabaseTask(config: AppConfig, taskName: "migration" | "seed" | "stage import"): void {
   if (config.NODE_ENV === "production" && !config.ALLOW_LIVE_DATABASE_TASKS) {
     throw new Error(`Refusing to run ${taskName} against production without ALLOW_LIVE_DATABASE_TASKS=true.`);
   }

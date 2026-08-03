@@ -44,6 +44,11 @@ export class MockStravaGateway implements StravaGateway {
     ];
   }
 
+  async getActivity(_input: { accessToken: string; providerActivityId: string }): Promise<StravaActivitySummary | null> {
+    const activities = await this.listRecentActivities({ accessToken: _input.accessToken });
+    return activities.find((activity) => activity.providerActivityId === _input.providerActivityId) ?? null;
+  }
+
   async getActivityStreams(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivityStreams> {
     return this.streamsByActivityId.get(input.providerActivityId) ?? {
       time: [0, 60, 120],
