@@ -28,6 +28,19 @@ public struct AppConfiguration: Sendable {
     usesFixtures: true,
     oauthCallbackScheme: "peloton"
   )
+
+  public static func fromEnvironment(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> AppConfiguration {
+    let name = environment["PELOTON_ENVIRONMENT"].flatMap(PelotonEnvironment.init(rawValue:)) ?? .fixture
+    let baseURL = environment["PELOTON_API_BASE_URL"].flatMap(URL.init(string:)) ?? URL(string: "http://127.0.0.1:8080")!
+    let callbackScheme = environment["PELOTON_OAUTH_CALLBACK_SCHEME"] ?? "peloton"
+
+    return AppConfiguration(
+      environment: name,
+      baseAPIURL: baseURL,
+      usesFixtures: name == .fixture,
+      oauthCallbackScheme: callbackScheme
+    )
+  }
 }
 
 @Observable
@@ -67,4 +80,3 @@ public final class RecapPlaybackState {
     currentTimeSeconds = min(max(seconds, 0), duration)
   }
 }
-

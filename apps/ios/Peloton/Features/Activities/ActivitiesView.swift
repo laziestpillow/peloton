@@ -1,54 +1,89 @@
 import SwiftUI
+import Foundation
+import PelotonCore
 
 struct ActivitiesView: View {
-  private let activities = [
-    RideActivity(title: "Barcelona Hills", date: "Jul 18, 2026", distance: "42.2 km", elevation: "680 m", status: "Processed"),
-    RideActivity(title: "Coastal Tempo", date: "Jul 22, 2026", distance: "30.5 km", elevation: "315 m", status: "Eligible")
-  ]
+  let store: AppStore
 
   var body: some View {
     NavigationStack {
       List {
         Section {
+          AuthenticationView(store: store)
+        }
+
+        Section {
           Button {
+            Task { await store.syncActivities() }
           } label: {
-            Label("Sync Activities", systemImage: "arrow.clockwise")
+            Label(store.isSyncing ? "Syncing" : "Sync Activities", systemImage: "arrow.clockwise")
           }
           .accessibilityLabel("Sync activities")
+          .disabled(store.isSyncing)
+        }
+
+        Section("Stages") {
+          if store.stages.isEmpty {
+            ContentUnavailableView("No stages", systemImage: "flag.checkered")
+          } else {
+            ForEach(store.stages) { stage in
+              Button {
+                Task { await store.selectStage(stage) }
+              } label: {
+                HStack {
+                  VStack(alignment: .leading, spacing: 4) {
+                    Text(stage.name).font(.headline)
+                    Text("\(stage.route.distanceMeters.kilometers) km · \(stage.status.capitalized)")
+                      .font(.subheadline)
+                      .foregroundStyle(.secondary)
+                  }
+                  Spacer()
+                  if stage.id == store.selectedStageId {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                  }
+                }
+              }
+            }
+          }
         }
 
         Section("Recent Rides") {
-          ForEach(activities) { activity in
-            VStack(alignment: .leading, spacing: 8) {
-              HStack {
-                Text(activity.title).font(.headline)
-                Spacer()
-                Text(activity.status).font(.caption).foregroundStyle(.secondary)
+          if store.isLoading {
+            ProgressView("Loading rides")
+          } else if store.activities.isEmpty {
+            ContentUnavailableView("No rides", systemImage: "bicycle")
+          } else {
+            ForEach(store.activities) { activity in
+              VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                  Text(activity.providerActivityId).font(.headline)
+                  Spacer()
+                  Text(activity.importStatus.capitalized).font(.caption).foregroundStyle(.secondary)
+                }
+                Text("\(activity.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(activity.distanceMeters.kilometers) km · \(Int(activity.elevationGainMeters)) m elevation")
+                  .font(.subheadline)
+                  .foregroundStyle(.secondary)
               }
-              Text("\(activity.date) · \(activity.distance) · \(activity.elevation) elevation")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+              .padding(.vertical, 4)
+              .accessibilityElement(children: .combine)
             }
-            .padding(.vertical, 4)
-            .accessibilityElement(children: .combine)
           }
         }
       }
       .navigationTitle("Rides")
+      .refreshable {
+        await store.loadInitialData()
+      }
     }
   }
 }
 
-struct RideActivity: Identifiable {
-  let id = UUID()
-  let title: String
-  let date: String
-  let distance: String
-  let elevation: String
-  let status: String
+private extension Double {
+  var kilometers: String {
+    String(format: "%.1f", self / 1000)
+  }
 }
 
 #Preview {
-  ActivitiesView()
+  ActivitiesView(store: AppStore.makeDefault())
 }
-

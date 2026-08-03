@@ -103,7 +103,7 @@ public struct LiveAPIClient: Sendable {
   }
 
   private func request<T: Decodable>(_ method: String, _ path: String, idempotencyKey: String? = nil) async throws -> T {
-    var request = try await makeRequest(method, path, idempotencyKey: idempotencyKey)
+    let request = try await makeRequest(method, path, idempotencyKey: idempotencyKey)
     let (data, response) = try await session.data(for: request)
     try validate(response: response, data: data)
     return try decoder.decode(T.self, from: data)
