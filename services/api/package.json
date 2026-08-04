@@ -14,6 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "seed": "tsx src/seed.ts",
+    "strava:retention": "tsx src/admin/stravaRetention.ts",
     "stage-catalog:import": "tsx src/admin/stageCatalogImport.ts",
     "contract:check": "node --experimental-strip-types scripts/contract-check.ts",
     "db:generate": "drizzle-kit generate",

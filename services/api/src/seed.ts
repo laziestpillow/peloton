@@ -166,9 +166,9 @@ async function seedDatabase(databaseUrl: string): Promise<void> {
         `
           INSERT INTO imported_activities (
             id, rider_id, provider, provider_activity_id, activity_type, started_at, distance_meters,
-            elapsed_time_seconds, moving_time_seconds, elevation_gain_meters, route_summary, import_status, processed_stage_id
+            elapsed_time_seconds, moving_time_seconds, elevation_gain_meters, route_summary, import_status, processed_stage_id, imported_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14)
           ON CONFLICT (provider, provider_activity_id) DO UPDATE SET
             rider_id = EXCLUDED.rider_id,
             activity_type = EXCLUDED.activity_type,
@@ -179,7 +179,8 @@ async function seedDatabase(databaseUrl: string): Promise<void> {
             elevation_gain_meters = EXCLUDED.elevation_gain_meters,
             route_summary = EXCLUDED.route_summary,
             import_status = EXCLUDED.import_status,
-            processed_stage_id = EXCLUDED.processed_stage_id
+            processed_stage_id = EXCLUDED.processed_stage_id,
+            imported_at = EXCLUDED.imported_at
         `,
         [
           activity.id,
@@ -194,7 +195,8 @@ async function seedDatabase(databaseUrl: string): Promise<void> {
           activity.elevationGainMeters,
           JSON.stringify(activity.routeSummary),
           activity.importStatus,
-          activity.processedStageId
+          activity.processedStageId,
+          now
         ]
       );
     }

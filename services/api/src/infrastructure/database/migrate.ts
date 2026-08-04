@@ -291,6 +291,13 @@ export const migrations: readonly Migration[] = [
         )
       `
     ]
+  },
+  {
+    name: "0009_imported_activity_retention.sql",
+    statements: [
+      "ALTER TABLE imported_activities ADD COLUMN imported_at timestamptz NOT NULL DEFAULT now()",
+      "ALTER TABLE imported_activities ALTER COLUMN imported_at DROP DEFAULT"
+    ]
   }
 ];
 

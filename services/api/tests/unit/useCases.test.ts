@@ -9,6 +9,7 @@ import {
   type StravaConnection,
   type StravaConnectionInput,
   type StravaConnectionUpdate,
+  type StravaDataRetentionResult,
   type StravaWebhookEventInput,
   type StravaOAuthState
 } from "../../src/application/useCases.js";
@@ -130,6 +131,7 @@ const fixtureData: ApiFixtureData = {
 class InMemoryRepository implements ApplicationRepository {
   private currentRider: RiderProfile | null = rider;
   readonly activities = new Map<string, ImportedActivity>([[activity.providerActivityId, activity]]);
+  readonly activityImportedAt = new Map<string, Date>([[activity.providerActivityId, new Date("2026-07-31T10:00:00.000Z")]]);
   readonly stravaStates = new Map<string, StravaOAuthState>();
   readonly stravaConnections = new Map<string, StravaConnection>();
   readonly activitySyncRequests = new Map<string, ActivitySyncStart & { userId: string; idempotencyKey: string | null; syncStatus: "running" | "completed" | "failed" }>();
@@ -298,10 +300,12 @@ class InMemoryRepository implements ApplicationRepository {
           processedStageId: input.processedStageId
         };
         this.activities.set(input.providerActivityId, updated);
+        this.activityImportedAt.set(input.providerActivityId, new Date("2026-07-31T10:00:00.000Z"));
         return { activity: updated, duplicate: false };
       }
       const duplicate = { ...existing, importStatus: "duplicate" as const };
       this.activities.set(input.providerActivityId, duplicate);
+      this.activityImportedAt.set(input.providerActivityId, new Date("2026-07-31T10:00:00.000Z"));
       return { activity: duplicate, duplicate: true };
     }
     const imported: ImportedActivity = {
@@ -320,14 +324,89 @@ class InMemoryRepository implements ApplicationRepository {
       processedStageId: input.processedStageId
     };
     this.activities.set(input.providerActivityId, imported);
+    this.activityImportedAt.set(input.providerActivityId, new Date("2026-07-31T10:00:00.000Z"));
     return { activity: imported, duplicate: false };
   }
 
   async markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void> {
     const existing = this.activities.get(input.providerActivityId);
     if (existing && existing.provider === input.provider) {
-      this.activities.set(input.providerActivityId, { ...existing, importStatus: "failed" });
+      this.activities.delete(input.providerActivityId);
+      this.activityImportedAt.delete(input.providerActivityId);
+      this.streamSamples.delete(existing.id);
+      for (const [key, result] of this.stageActivityResults) {
+        if (result.activityId === existing.id) {
+          this.stageActivityResults.delete(key);
+        }
+      }
+      for (const [key, crossing] of this.stageMarkerCrossings) {
+        if (crossing.activityId === existing.id) {
+          this.stageMarkerCrossings.delete(key);
+        }
+      }
     }
+  }
+
+  async deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void> {
+    const current = await this.getCurrentRider(input.userId);
+    if (!current) {
+      return;
+    }
+    for (const [providerActivityId, imported] of this.activities) {
+      if (imported.provider === "strava" && imported.riderId === current.id) {
+        this.activities.delete(providerActivityId);
+        this.activityImportedAt.delete(providerActivityId);
+        this.streamSamples.delete(imported.id);
+        for (const [key, result] of this.stageActivityResults) {
+          if (result.activityId === imported.id) {
+            this.stageActivityResults.delete(key);
+          }
+        }
+        for (const [key, crossing] of this.stageMarkerCrossings) {
+          if (crossing.activityId === imported.id) {
+            this.stageMarkerCrossings.delete(key);
+          }
+        }
+      }
+    }
+    for (let index = this.stravaWebhookEvents.length - 1; index >= 0; index -= 1) {
+      if (this.stravaWebhookEvents[index]?.event.ownerId === input.athleteId) {
+        this.stravaWebhookEvents.splice(index, 1);
+      }
+    }
+  }
+
+  async deleteExpiredStravaData(input: { cutoff: Date; effectiveAt: Date }): Promise<StravaDataRetentionResult> {
+    let deletedActivities = 0;
+    for (const [providerActivityId, imported] of this.activities) {
+      const importedAt = this.activityImportedAt.get(providerActivityId);
+      if (imported.provider === "strava" && importedAt && importedAt.getTime() < input.cutoff.getTime()) {
+        this.activities.delete(providerActivityId);
+        this.activityImportedAt.delete(providerActivityId);
+        this.streamSamples.delete(imported.id);
+        for (const [key, result] of this.stageActivityResults) {
+          if (result.activityId === imported.id) {
+            this.stageActivityResults.delete(key);
+          }
+        }
+        for (const [key, crossing] of this.stageMarkerCrossings) {
+          if (crossing.activityId === imported.id) {
+            this.stageMarkerCrossings.delete(key);
+          }
+        }
+        deletedActivities += 1;
+      }
+    }
+
+    let deletedWebhookEvents = 0;
+    for (let index = this.stravaWebhookEvents.length - 1; index >= 0; index -= 1) {
+      const webhookEvent = this.stravaWebhookEvents[index];
+      if (webhookEvent && webhookEvent.receivedAt.getTime() < input.cutoff.getTime()) {
+        this.stravaWebhookEvents.splice(index, 1);
+        deletedWebhookEvents += 1;
+      }
+    }
+    return { deletedActivities, deletedWebhookEvents };
   }
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
@@ -547,6 +626,21 @@ describe("application use cases", () => {
       statusCode: 403,
       code: "forbidden"
     });
+  });
+
+  test("shared stage responses expose Peloton race state without raw Strava fields", async () => {
+    const useCases = createApplicationUseCases(new InMemoryRepository(), "user-001", fixtureData);
+
+    const [recap, results] = await Promise.all([
+      useCases.getStageRecap("stage-001"),
+      useCases.getStageResults("stage-001")
+    ]);
+    const sharedPayload = JSON.stringify({ recap, results });
+
+    expect(sharedPayload).not.toContain("providerActivityId");
+    expect(sharedPayload).not.toContain("provider");
+    expect(sharedPayload).not.toContain("routeSummary");
+    expect(sharedPayload).not.toContain("polyline");
   });
 
   test("creates and completes Strava OAuth connection through durable state", async () => {
@@ -935,6 +1029,32 @@ describe("application use cases", () => {
       importStatus: "processed",
       processedStageId: "stage-001"
     });
+    const imported = repository.activities.get("1360128428");
+    if (!imported) {
+      throw new Error("Expected imported Strava activity.");
+    }
+    await repository.replaceActivityStreamSamples({
+      activityId: imported.id,
+      samples: [
+        { sequence: 0, timeSeconds: 0, distanceMeters: 0, latitude: 41.38, longitude: 2.15, altitudeMeters: 32, velocityMetersPerSecond: 0 }
+      ]
+    });
+    await repository.saveActivityStageMatch({
+      activityId: imported.id,
+      riderId: imported.riderId,
+      stageId: "stage-001",
+      finishTimeSeconds: 1000,
+      matchedAt: new Date("2026-07-31T10:00:00.000Z"),
+      markerCrossings: [{
+        stageId: "stage-001",
+        markerId: "marker-sprint-001",
+        activityId: imported.id,
+        riderId: imported.riderId,
+        crossedAtSeconds: 120,
+        rank: 1,
+        points: 20
+      }]
+    });
     const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices());
 
     await useCases.receiveStravaWebhook({
@@ -945,10 +1065,10 @@ describe("application use cases", () => {
       subscription_id: 120475,
       event_time: 1516126040
     });
-    expect(repository.activities.get("1360128428")).toMatchObject({
-      importStatus: "failed",
-      processedStageId: "stage-001"
-    });
+    expect(repository.activities.has("1360128428")).toBe(false);
+    expect(repository.streamSamples.has(imported.id)).toBe(false);
+    expect(repository.stageActivityResults.has("stage-001:rider-001")).toBe(false);
+    expect([...repository.stageMarkerCrossings.values()].some((crossing) => crossing.activityId === imported.id)).toBe(false);
 
     await useCases.receiveStravaWebhook({
       object_type: "athlete",
@@ -963,5 +1083,102 @@ describe("application use cases", () => {
     expect(connection).toMatchObject({ status: "revoked" });
     expect(tokenCipher.decrypt(connection?.encryptedAccessToken ?? "")).toBe("revoked");
     expect(tokenCipher.decrypt(connection?.encryptedRefreshToken ?? "")).toBe("revoked");
+    expect(repository.stravaWebhookEvents).toHaveLength(0);
+  });
+
+  test("expires cached Strava activity and webhook data after retention cutoff", async () => {
+    const repository = new InMemoryRepository();
+    const oldResult = await repository.upsertImportedActivity({
+      riderId: "rider-001",
+      provider: "strava",
+      providerActivityId: "old-strava-activity",
+      activityType: "ride",
+      startedAt: new Date("2026-07-01T07:30:00.000Z"),
+      distanceMeters: 10000,
+      elapsedTimeSeconds: 1800,
+      movingTimeSeconds: 1700,
+      elevationGainMeters: 100,
+      routeSummary: activity.routeSummary,
+      importStatus: "processed",
+      processedStageId: "stage-001"
+    });
+    await repository.upsertImportedActivity({
+      riderId: "rider-001",
+      provider: "strava",
+      providerActivityId: "recent-strava-activity",
+      activityType: "ride",
+      startedAt: new Date("2026-07-01T07:30:00.000Z"),
+      distanceMeters: 12000,
+      elapsedTimeSeconds: 1900,
+      movingTimeSeconds: 1800,
+      elevationGainMeters: 120,
+      routeSummary: activity.routeSummary,
+      importStatus: "processed",
+      processedStageId: "stage-001"
+    });
+    repository.activityImportedAt.set("old-strava-activity", new Date("2026-07-23T09:59:59.000Z"));
+    repository.activityImportedAt.set("recent-strava-activity", new Date("2026-07-24T10:00:00.000Z"));
+    await repository.replaceActivityStreamSamples({
+      activityId: oldResult.activity.id,
+      samples: [
+        { sequence: 0, timeSeconds: 0, distanceMeters: 0, latitude: 41.38, longitude: 2.15, altitudeMeters: 32, velocityMetersPerSecond: 0 }
+      ]
+    });
+    await repository.saveActivityStageMatch({
+      activityId: oldResult.activity.id,
+      riderId: oldResult.activity.riderId,
+      stageId: "stage-001",
+      finishTimeSeconds: 1000,
+      matchedAt: new Date("2026-07-31T10:00:00.000Z"),
+      markerCrossings: [{
+        stageId: "stage-001",
+        markerId: "marker-sprint-001",
+        activityId: oldResult.activity.id,
+        riderId: oldResult.activity.riderId,
+        crossedAtSeconds: 120,
+        rank: 1,
+        points: 20
+      }]
+    });
+    await repository.recordStravaWebhookEvent({
+      event: {
+        objectType: "activity",
+        objectId: "old-strava-activity",
+        aspectType: "update",
+        ownerId: "134815",
+        subscriptionId: 120475,
+        eventTime: new Date("2026-07-23T09:59:59.000Z"),
+        updates: {}
+      },
+      action: "sync_requested",
+      receivedAt: new Date("2026-07-23T09:59:59.000Z")
+    });
+    await repository.recordStravaWebhookEvent({
+      event: {
+        objectType: "activity",
+        objectId: "recent-strava-activity",
+        aspectType: "update",
+        ownerId: "134815",
+        subscriptionId: 120475,
+        eventTime: new Date("2026-07-24T10:00:00.000Z"),
+        updates: {}
+      },
+      action: "sync_requested",
+      receivedAt: new Date("2026-07-24T10:00:00.000Z")
+    });
+
+    await expect(repository.deleteExpiredStravaData({
+      cutoff: new Date("2026-07-24T10:00:00.000Z"),
+      effectiveAt: new Date("2026-07-31T10:00:00.000Z")
+    })).resolves.toEqual({ deletedActivities: 1, deletedWebhookEvents: 1 });
+
+    expect(repository.activities.has("old-strava-activity")).toBe(false);
+    expect(repository.activities.has("recent-strava-activity")).toBe(true);
+    expect(repository.activities.has("fixture-ride-001")).toBe(true);
+    expect(repository.streamSamples.has(oldResult.activity.id)).toBe(false);
+    expect(repository.stageActivityResults.has("stage-001:rider-001")).toBe(false);
+    expect([...repository.stageMarkerCrossings.values()].some((crossing) => crossing.activityId === oldResult.activity.id)).toBe(false);
+    expect(repository.stravaWebhookEvents).toHaveLength(1);
+    expect(repository.stravaWebhookEvents[0]?.event.objectId).toBe("recent-strava-activity");
   });
 });
