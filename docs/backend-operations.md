@@ -9,6 +9,7 @@ The backend can run in fixture mode for local development and Postgres-backed mo
 - `DATABASE_URL`: a non-local Postgres connection URL.
 - `FIXTURE_AUTH_TOKENS`: non-default bearer tokens until production auth replaces fixture auth.
 - `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`: backend-only Strava app credentials.
+- `STRAVA_API_BASE_URL`: Strava API v3 base URL. Defaults to `https://api-v3.strava.com`.
 - `STRAVA_CALLBACK_URL`: public OAuth callback URL.
 - `STRAVA_WEBHOOK_CALLBACK_URL`: public Strava webhook callback URL.
 - `STRAVA_WEBHOOK_VERIFY_TOKEN`: backend-only webhook verification token.

@@ -17,6 +17,7 @@ describe("environment config", () => {
   test("allows local fixture defaults", () => {
     expect(loadConfig({ NODE_ENV: "development" })).toMatchObject({
       NODE_ENV: "development",
+      STRAVA_API_BASE_URL: "https://api-v3.strava.com",
       STRAVA_OAUTH_SCOPE: "read,activity:read_all"
     });
   });
@@ -33,6 +34,7 @@ describe("environment config", () => {
     expect(loadConfig(liveConfig)).toMatchObject({
       NODE_ENV: "production",
       STRAVA_CLIENT_ID: "12345",
+      STRAVA_API_BASE_URL: "https://api-v3.strava.com",
       ALLOW_LIVE_DATABASE_TASKS: false
     });
   });
@@ -46,6 +48,7 @@ describe("environment config", () => {
   test("rejects default live callback URLs and encryption key", () => {
     expect(() => loadConfig({ ...liveConfig, STRAVA_CALLBACK_URL: "http://127.0.0.1:8080/v1/auth/strava/callback" })).toThrow("STRAVA_CALLBACK_URL");
     expect(() => loadConfig({ ...liveConfig, STRAVA_WEBHOOK_CALLBACK_URL: "http://localhost:8080/v1/webhooks/strava" })).toThrow("STRAVA_WEBHOOK_CALLBACK_URL");
+    expect(() => loadConfig({ ...liveConfig, STRAVA_API_BASE_URL: "http://localhost:8080" })).toThrow("STRAVA_API_BASE_URL");
     expect(() => loadConfig({ ...liveConfig, STRAVA_TOKEN_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000" })).toThrow("STRAVA_TOKEN_ENCRYPTION_KEY");
   });
 

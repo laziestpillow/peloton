@@ -7,6 +7,7 @@ Run this checklist after deploying the backend to staging and before TestFlight 
 - `DATABASE_URL`
 - `STRAVA_CLIENT_ID`
 - `STRAVA_CLIENT_SECRET`
+- `STRAVA_API_BASE_URL`
 - `STRAVA_WEBHOOK_VERIFY_TOKEN`
 - `STRAVA_TOKEN_ENCRYPTION_KEY`
 - `FIXTURE_AUTH_TOKENS` or the staging bearer-token source
@@ -48,6 +49,7 @@ Expected results:
 - Configure the staging base URL in the app environment.
 - Verify Strava callback redirects to `APP_DEEP_LINK_URL`.
 - Confirm the app can refresh Strava status, trigger activity sync, list activities, open a stage recap, and display results from staging data.
+- Record whether staging verified `STRAVA_API_BASE_URL=https://api-v3.strava.com` or a temporary fallback host.
 
 ## Rollback And Rotation
 

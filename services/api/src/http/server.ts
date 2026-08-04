@@ -87,7 +87,7 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
   });
   const fixtureData = await loadApiFixtureData();
   const liveRepository = options.repository ? { repository: options.repository } : createRepository(config, fixtureData);
-  const stravaGateway = options.stravaGateway ?? new HttpStravaGateway();
+  const stravaGateway = options.stravaGateway ?? new HttpStravaGateway({ apiBaseUrl: config.STRAVA_API_BASE_URL });
   const tokenCipher = createTokenCipher(config.STRAVA_TOKEN_ENCRYPTION_KEY);
   const createUseCasesForUser = (userId: string): ApplicationUseCases => createApplicationUseCases(liveRepository.repository, userId, fixtureData, {
     stravaGateway,
