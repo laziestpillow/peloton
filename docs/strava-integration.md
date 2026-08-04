@@ -6,3 +6,4 @@ The backend stores OAuth state, exchanges codes with the server-side client secr
 
 New development environments should use `MockStravaGateway` until real Strava credentials are configured.
 
+External beta and public multiplayer sharing are blocked by the compliance policy in [strava-compliance.md](strava-compliance.md). Raw Strava imports are self-only; shared group views must use Peloton-native race state.
