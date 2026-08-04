@@ -1,0 +1,22 @@
+{
+  "title": "Connect Strava",
+  "summary": "Peloton uses Strava only to import your cycling activities and turn them into private activity history plus Peloton race results.",
+  "dataCollected": [
+    "Activity summaries such as ride time, distance, elevation, activity type, and start time.",
+    "Route preview data and activity streams such as distance, time, location, altitude, and speed when Strava provides them.",
+    "Your Strava athlete identifier, accepted scopes, token expiry, and encrypted tokens needed to keep the connection working."
+  ],
+  "dataUse": [
+    "Match your rides to Peloton stages and markers.",
+    "Calculate Peloton-native classifications, standings, jersey leaders, recap timelines, and rider archetypes.",
+    "Keep your Strava connection current, process Strava webhook updates, and remove activities that Strava reports as deleted or inaccessible."
+  ],
+  "sharedOutputs": "Group views show Peloton-native race outputs such as rankings, points, jersey leaders, archetypes, and recap positions. They do not show another rider's raw Strava activity metadata, provider activity IDs, route maps, polylines, streams, or segment data.",
+  "disconnect": "Disconnect revokes Peloton's Strava access and stops future syncs. It does not delete previously imported Strava data unless you also choose deletion.",
+  "deletion": "Delete Strava data revokes the connection and removes stored Strava imports, streams, webhook event records, and dependent race rows tied to those imports.",
+  "supportEmail": "support@example.com",
+  "attribution": {
+    "strava": "Activity data provided by Strava.",
+    "garmin": "Some activity data may originate from Garmin devices through Strava and should be attributed to Garmin when displayed."
+  }
+}

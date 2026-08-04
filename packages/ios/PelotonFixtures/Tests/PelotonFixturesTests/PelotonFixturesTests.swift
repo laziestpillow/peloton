@@ -13,6 +13,13 @@ import Testing
   #expect(activities.data.first?.id == "activity-001")
 }
 
+@Test func decodesFixtureStravaConsent() async throws {
+  let client = FixtureDataClient()
+  let consent = try await client.stravaConsentInfo()
+  #expect(consent.title == "Connect Strava")
+  #expect(consent.attribution.garmin.contains("Garmin"))
+}
+
 @Test func decodesFixtureStagesAndArchetypes() async throws {
   let client = FixtureDataClient()
   let stages = try await client.stages(groupId: "group-001")

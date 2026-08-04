@@ -26,8 +26,16 @@ public struct LiveAPIClient: Sendable {
     try await request("GET", "/v1/integrations/strava/status")
   }
 
+  public func stravaConsentInfo() async throws -> StravaConsentInfo {
+    try await request("GET", "/v1/integrations/strava/consent")
+  }
+
   public func disconnectStrava() async throws {
     try await requestNoContent("DELETE", "/v1/integrations/strava")
+  }
+
+  public func deleteStravaData() async throws {
+    try await requestNoContent("DELETE", "/v1/integrations/strava/data")
   }
 
   public func syncActivities(idempotencyKey: String = UUID().uuidString) async throws -> ActivitySyncResponse {

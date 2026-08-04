@@ -17,6 +17,7 @@ final class AppStore {
 
   var rider: RiderProfile?
   var stravaStatus: StravaIntegrationStatus?
+  var stravaConsentInfo: StravaConsentInfo?
   var activities: [ImportedActivity] = []
   var stages: [Stage] = []
   var recap: StageRecap?
@@ -56,6 +57,7 @@ final class AppStore {
     do {
       async let rider = client.currentRider()
       async let status = client.stravaStatus()
+      async let consent = client.stravaConsentInfo()
       async let activities = client.activities()
       async let stages = client.stages(groupId: "group-001")
 
@@ -64,6 +66,7 @@ final class AppStore {
 
       self.rider = try await rider
       self.stravaStatus = try await status
+      self.stravaConsentInfo = try await consent
       self.activities = activityResponse.data
       self.stages = stageResponse.data
 
@@ -116,6 +119,17 @@ final class AppStore {
   func disconnectStrava() async {
     do {
       try await client.disconnectStrava()
+      await refreshStravaStatus()
+    } catch {
+      errorMessage = displayMessage(for: error)
+    }
+  }
+
+  func deleteStravaData() async {
+    do {
+      try await client.deleteStravaData()
+      let activityResponse = try await client.activities()
+      activities = activityResponse.data
       await refreshStravaStatus()
     } catch {
       errorMessage = displayMessage(for: error)

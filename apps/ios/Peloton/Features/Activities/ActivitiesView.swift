@@ -63,6 +63,11 @@ struct ActivitiesView: View {
                 Text("\(activity.startedAt.formatted(date: .abbreviated, time: .shortened)) - \(activity.distanceMeters.kilometers) km - \(Int(activity.elevationGainMeters)) m elevation")
                   .font(.subheadline)
                   .foregroundStyle(.secondary)
+                if activity.provider == "strava", let attribution = store.stravaConsentInfo?.attribution {
+                  Text("\(attribution.strava) \(attribution.garmin)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
               }
               .padding(.vertical, 4)
               .accessibilityElement(children: .combine)

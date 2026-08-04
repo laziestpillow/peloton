@@ -61,6 +61,32 @@ paths:
           $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /v1/integrations/strava/consent:
+    get:
+      operationId: getStravaConsentInfo
+      tags: [Integrations]
+      responses:
+        "200":
+          description: User-facing Strava consent, attribution, disconnect, deletion, and support information.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StravaConsentInfo"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /v1/integrations/strava/data:
+    delete:
+      operationId: deleteStravaData
+      tags: [Integrations]
+      responses:
+        "204":
+          description: Stored Strava data for the authenticated user was deleted and the Strava connection was revoked.
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /v1/integrations/strava/status:
     get:
       operationId: getStravaStatus
@@ -589,6 +615,28 @@ components:
         lastSyncedAt:
           type: [string, "null"]
           format: date-time
+    StravaConsentInfo:
+      type: object
+      required: [title, summary, dataCollected, dataUse, sharedOutputs, disconnect, deletion, supportEmail, attribution]
+      properties:
+        title: { type: string }
+        summary: { type: string }
+        dataCollected:
+          type: array
+          items: { type: string }
+        dataUse:
+          type: array
+          items: { type: string }
+        sharedOutputs: { type: string }
+        disconnect: { type: string }
+        deletion: { type: string }
+        supportEmail: { type: string, format: email }
+        attribution:
+          type: object
+          required: [strava, garmin]
+          properties:
+            strava: { type: string }
+            garmin: { type: string }
     StravaWebhookSubscription:
       type: object
       required: [id, applicationId, callbackUrl, createdAt, updatedAt]
