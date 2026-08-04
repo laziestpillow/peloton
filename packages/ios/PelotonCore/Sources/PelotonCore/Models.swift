@@ -96,6 +96,23 @@ public struct StravaIntegrationStatus: Codable, Equatable, Sendable {
   public let lastSyncedAt: Date?
 }
 
+public struct StravaConsentInfo: Codable, Equatable, Sendable {
+  public let title: String
+  public let summary: String
+  public let dataCollected: [String]
+  public let dataUse: [String]
+  public let sharedOutputs: String
+  public let disconnect: String
+  public let deletion: String
+  public let supportEmail: String
+  public let attribution: StravaAttribution
+}
+
+public struct StravaAttribution: Codable, Equatable, Sendable {
+  public let strava: String
+  public let garmin: String
+}
+
 public struct Group: Codable, Identifiable, Equatable, Sendable {
   public let id: String
   public let name: String

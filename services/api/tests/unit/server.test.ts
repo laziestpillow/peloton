@@ -173,12 +173,31 @@ describe("server repository-backed routes", () => {
         expect.objectContaining({ provider: "strava", providerActivityId: "mock-strava-001", importStatus: "eligible" })
       ]));
 
+      const consent = await app.inject({ method: "GET", url: "/v1/integrations/strava/consent", headers: userOneAuth });
+      expect(consent.statusCode).toBe(200);
+      expect(consent.json()).toMatchObject({
+        title: "Connect Strava",
+        attribution: {
+          strava: expect.stringContaining("Strava"),
+          garmin: expect.stringContaining("Garmin")
+        }
+      });
+
       const disconnect = await app.inject({ method: "DELETE", url: "/v1/integrations/strava", headers: userOneAuth });
       expect(disconnect.statusCode).toBe(204);
 
       const revokedStatus = await app.inject({ method: "GET", url: "/v1/integrations/strava/status", headers: userOneAuth });
       expect(revokedStatus.statusCode).toBe(200);
       expect(revokedStatus.json()).toMatchObject({ status: "revoked" });
+
+      const deleteData = await app.inject({ method: "DELETE", url: "/v1/integrations/strava/data", headers: userOneAuth });
+      expect(deleteData.statusCode).toBe(204);
+
+      const activitiesAfterDeletion = await app.inject({ method: "GET", url: "/v1/activities", headers: userOneAuth });
+      expect(activitiesAfterDeletion.statusCode).toBe(200);
+      expect(activitiesAfterDeletion.json().data).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ provider: "strava", providerActivityId: "mock-strava-001" })
+      ]));
     } finally {
       await app.close();
     }

@@ -87,6 +87,47 @@ struct LiveAPIClientTests {
 
     #expect(rider.appearance.pattern == .solid)
   }
+
+  @Test func readsStravaConsentAndDeletesStravaData() async throws {
+    var requestedPaths: [String] = []
+    MockURLProtocol.handler = { request in
+      requestedPaths.append(request.url?.path ?? "")
+      if request.httpMethod == "DELETE" {
+        return (
+          HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!,
+          Data()
+        )
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+        """
+        {
+          "title": "Connect Strava",
+          "summary": "Peloton imports cycling activities.",
+          "dataCollected": ["Activity summaries"],
+          "dataUse": ["Stage matching"],
+          "sharedOutputs": "Peloton race outputs only.",
+          "disconnect": "Disconnect stops future syncs.",
+          "deletion": "Delete removes stored Strava data.",
+          "supportEmail": "support@example.com",
+          "attribution": {
+            "strava": "Activity data provided by Strava.",
+            "garmin": "Some activity data may originate from Garmin devices through Strava."
+          }
+        }
+        """.data(using: .utf8)!
+      )
+    }
+    defer { MockURLProtocol.handler = nil }
+
+    let client = LiveAPIClient(baseURL: URL(string: "http://127.0.0.1:8080")!, session: mockSession)
+    let consent = try await client.stravaConsentInfo()
+    try await client.deleteStravaData()
+
+    #expect(consent.title == "Connect Strava")
+    #expect(consent.attribution.strava.contains("Strava"))
+    #expect(requestedPaths == ["/v1/integrations/strava/consent", "/v1/integrations/strava/data"])
+  }
 }
 
 private var mockSession: URLSession {

@@ -266,7 +266,7 @@ export class FixtureRepository implements ApplicationRepository {
     }
   }
 
-  async deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void> {
+  async deleteStravaDataForUser(input: { userId: string; athleteId: string | null }): Promise<void> {
     const riderIds = new Set(this.fixtureData.recap.riders.filter((rider) => rider.userId === input.userId).map((rider) => rider.id));
     for (const [providerKey, activity] of this.stravaActivities) {
       if (activity.provider === "strava" && riderIds.has(activity.riderId)) {
@@ -284,6 +284,9 @@ export class FixtureRepository implements ApplicationRepository {
           }
         }
       }
+    }
+    if (!input.athleteId) {
+      return;
     }
     for (let index = this.stravaWebhookEvents.length - 1; index >= 0; index -= 1) {
       if (this.stravaWebhookEvents[index]?.event.ownerId === input.athleteId) {

@@ -58,6 +58,21 @@ export interface StravaIntegrationStatus {
   lastSyncedAt: string | null;
 }
 
+export interface StravaConsentInfo {
+  title: string;
+  summary: string;
+  dataCollected: readonly string[];
+  dataUse: readonly string[];
+  sharedOutputs: string;
+  disconnect: string;
+  deletion: string;
+  supportEmail: string;
+  attribution: {
+    strava: string;
+    garmin: string;
+  };
+}
+
 export interface ActivitySyncStart {
   syncId: string;
   status: "accepted" | "alreadyRunning";
@@ -141,7 +156,7 @@ export interface ApplicationRepository {
   completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void>;
   upsertImportedActivity(input: ImportedActivityInput, options?: { replaceExisting?: boolean }): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
   markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void>;
-  deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void>;
+  deleteStravaDataForUser(input: { userId: string; athleteId: string | null }): Promise<void>;
   deleteExpiredStravaData(input: { cutoff: Date; effectiveAt: Date }): Promise<StravaDataRetentionResult>;
   replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void>;
   listMatchableStages(): Promise<readonly Stage[]>;
@@ -166,9 +181,11 @@ export interface ApplicationUseCases {
   getStage(stageId: string): Promise<Stage | null>;
   startStravaAuthorization(): Promise<{ authorizationUrl: string; stateExpiresAt: string }>;
   completeStravaAuthorization(input: { code?: string; state: string; scope?: string; error?: string }): Promise<{ redirectUrl: string }>;
+  getStravaConsentInfo(): Promise<StravaConsentInfo>;
   getStravaStatus(): Promise<StravaIntegrationStatus>;
   refreshStravaConnection(): Promise<StravaConnection | null>;
   disconnectStrava(): Promise<void>;
+  deleteStravaData(): Promise<void>;
   syncActivities(input?: { idempotencyKey?: string }): Promise<{ status: "accepted" | "alreadyRunning"; requestedAt: string }>;
   getStageRecap(stageId: string): Promise<StageRecap | null>;
   getStageResults(stageId: string): Promise<StageResultsResponse | null>;
@@ -190,6 +207,29 @@ export class ApplicationError extends Error {
     super(message);
   }
 }
+
+const stravaConsentInfo: StravaConsentInfo = {
+  title: "Connect Strava",
+  summary: "Peloton uses Strava only to import your cycling activities and turn them into private activity history plus Peloton race results.",
+  dataCollected: [
+    "Activity summaries such as ride time, distance, elevation, activity type, and start time.",
+    "Route preview data and activity streams such as distance, time, location, altitude, and speed when Strava provides them.",
+    "Your Strava athlete identifier, accepted scopes, token expiry, and encrypted tokens needed to keep the connection working."
+  ],
+  dataUse: [
+    "Match your rides to Peloton stages and markers.",
+    "Calculate Peloton-native classifications, standings, jersey leaders, recap timelines, and rider archetypes.",
+    "Keep your Strava connection current, process Strava webhook updates, and remove activities that Strava reports as deleted or inaccessible."
+  ],
+  sharedOutputs: "Group views show Peloton-native race outputs such as rankings, points, jersey leaders, archetypes, and recap positions. They do not show another rider's raw Strava activity metadata, provider activity IDs, route maps, polylines, streams, or segment data.",
+  disconnect: "Disconnect revokes Peloton's Strava access and stops future syncs. It does not delete previously imported Strava data unless you also choose deletion.",
+  deletion: "Delete Strava data revokes the connection and removes stored Strava imports, streams, webhook event records, and dependent race rows tied to those imports.",
+  supportEmail: "support@example.com",
+  attribution: {
+    strava: "Activity data provided by Strava.",
+    garmin: "Some activity data may originate from Garmin devices through Strava and should be attributed to Garmin when displayed."
+  }
+};
 
 export function createApplicationUseCases(
   repository: ApplicationRepository,
@@ -520,6 +560,9 @@ export function createApplicationUseCases(
     async getStravaStatus() {
       return toIntegrationStatus(await repository.getStravaConnection(currentUserId));
     },
+    async getStravaConsentInfo() {
+      return stravaConsentInfo;
+    },
     refreshStravaConnection,
     async disconnectStrava() {
       const strava = requireStravaServices();
@@ -546,6 +589,31 @@ export function createApplicationUseCases(
         accessTokenExpiresAt: now(),
         status: "revoked"
       });
+    },
+    async deleteStravaData() {
+      const connection = await repository.getStravaConnection(currentUserId);
+      if (connection && connection.status !== "revoked") {
+        const strava = requireStravaServices();
+        const refreshToken = strava.tokenCipher.decrypt(connection.encryptedRefreshToken);
+        try {
+          await strava.stravaGateway.revokeToken({
+            clientId: strava.stravaClientId,
+            clientSecret: strava.stravaClientSecret,
+            token: refreshToken,
+            tokenTypeHint: "refresh_token"
+          });
+        } catch {
+          // Deletion must still remove local Strava data if Strava revocation fails.
+        }
+        await repository.updateStravaConnection({
+          ...connection,
+          encryptedAccessToken: strava.tokenCipher.encrypt("revoked"),
+          encryptedRefreshToken: strava.tokenCipher.encrypt("revoked"),
+          accessTokenExpiresAt: now(),
+          status: "revoked"
+        });
+      }
+      await repository.deleteStravaDataForUser({ userId: currentUserId, athleteId: connection?.athleteId ?? null });
     },
     async syncActivities(input) {
       const strava = requireStravaServices();

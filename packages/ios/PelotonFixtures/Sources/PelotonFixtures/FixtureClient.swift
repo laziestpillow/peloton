@@ -4,7 +4,9 @@ import PelotonCore
 public protocol PelotonDataClient: Sendable {
   func startStravaAuthorization() async throws -> StravaAuthorizationStart
   func stravaStatus() async throws -> StravaIntegrationStatus
+  func stravaConsentInfo() async throws -> StravaConsentInfo
   func disconnectStrava() async throws
+  func deleteStravaData() async throws
   func syncActivities(idempotencyKey: String) async throws -> ActivitySyncResponse
   func currentRider() async throws -> RiderProfile
   func updateCurrentRiderAppearance(_ appearance: RiderAppearance, idempotencyKey: String) async throws -> RiderProfile
@@ -46,7 +48,13 @@ public struct FixtureDataClient: PelotonDataClient {
     try decode(StravaIntegrationStatus.self, resource: "strava-status")
   }
 
+  public func stravaConsentInfo() async throws -> StravaConsentInfo {
+    try decode(StravaConsentInfo.self, resource: "strava-consent")
+  }
+
   public func disconnectStrava() async throws {}
+
+  public func deleteStravaData() async throws {}
 
   public func syncActivities(idempotencyKey: String) async throws -> ActivitySyncResponse {
     try decode(ActivitySyncResponse.self, resource: "activity-sync")

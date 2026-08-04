@@ -347,7 +347,7 @@ class InMemoryRepository implements ApplicationRepository {
     }
   }
 
-  async deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void> {
+  async deleteStravaDataForUser(input: { userId: string; athleteId: string | null }): Promise<void> {
     const current = await this.getCurrentRider(input.userId);
     if (!current) {
       return;
@@ -368,6 +368,9 @@ class InMemoryRepository implements ApplicationRepository {
           }
         }
       }
+    }
+    if (!input.athleteId) {
+      return;
     }
     for (let index = this.stravaWebhookEvents.length - 1; index >= 0; index -= 1) {
       if (this.stravaWebhookEvents[index]?.event.ownerId === input.athleteId) {
@@ -1083,6 +1086,65 @@ describe("application use cases", () => {
     expect(connection).toMatchObject({ status: "revoked" });
     expect(tokenCipher.decrypt(connection?.encryptedAccessToken ?? "")).toBe("revoked");
     expect(tokenCipher.decrypt(connection?.encryptedRefreshToken ?? "")).toBe("revoked");
+    expect(repository.stravaWebhookEvents).toHaveLength(0);
+  });
+
+  test("exposes Strava consent and deletes stored Strava data on request", async () => {
+    const repository = new InMemoryRepository();
+    await repository.upsertStravaConnection(connectedStravaConnection({ athleteId: "134815" }));
+    const imported = await repository.upsertImportedActivity({
+      riderId: "rider-001",
+      provider: "strava",
+      providerActivityId: "delete-me",
+      activityType: "ride",
+      startedAt: new Date("2026-07-18T07:30:00.000Z"),
+      distanceMeters: 42195,
+      elapsedTimeSeconds: 3700,
+      movingTimeSeconds: 3500,
+      elevationGainMeters: 500,
+      routeSummary: activity.routeSummary,
+      importStatus: "processed",
+      processedStageId: "stage-001"
+    });
+    await repository.replaceActivityStreamSamples({
+      activityId: imported.activity.id,
+      samples: [
+        { sequence: 0, timeSeconds: 0, distanceMeters: 0, latitude: 41.38, longitude: 2.15, altitudeMeters: 32, velocityMetersPerSecond: 0 }
+      ]
+    });
+    await repository.recordStravaWebhookEvent({
+      event: {
+        objectType: "activity",
+        objectId: "delete-me",
+        aspectType: "update",
+        ownerId: "134815",
+        subscriptionId: 120475,
+        eventTime: new Date("2026-07-31T10:00:00.000Z"),
+        updates: {}
+      },
+      action: "sync_requested",
+      receivedAt: new Date("2026-07-31T10:00:00.000Z")
+    });
+    const gateway = new RecordingGateway();
+    const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices(gateway));
+
+    await expect(useCases.getStravaConsentInfo()).resolves.toMatchObject({
+      title: "Connect Strava",
+      supportEmail: "support@example.com",
+      attribution: {
+        strava: expect.stringContaining("Strava"),
+        garmin: expect.stringContaining("Garmin")
+      }
+    });
+    await useCases.deleteStravaData();
+
+    const connection = repository.stravaConnections.get("user-001");
+    expect(gateway.revokedToken).toBe("old-refresh");
+    expect(connection).toMatchObject({ status: "revoked" });
+    expect(tokenCipher.decrypt(connection?.encryptedAccessToken ?? "")).toBe("revoked");
+    expect(repository.activities.has("delete-me")).toBe(false);
+    expect(repository.activities.has("fixture-ride-001")).toBe(true);
+    expect(repository.streamSamples.has(imported.activity.id)).toBe(false);
     expect(repository.stravaWebhookEvents).toHaveLength(0);
   });
 

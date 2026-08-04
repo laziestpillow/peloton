@@ -164,6 +164,17 @@ export async function buildServer(config: AppConfig, options: ServerOptions = {}
     return reply.status(204).send();
   });
 
+  app.get("/v1/integrations/strava/consent", async (request) => {
+    const useCases = getUseCases(request);
+    return useCases.getStravaConsentInfo();
+  });
+
+  app.delete("/v1/integrations/strava/data", async (request, reply) => {
+    const useCases = getUseCases(request);
+    await useCases.deleteStravaData();
+    return reply.status(204).send();
+  });
+
   app.get("/v1/integrations/strava/status", async (request) => {
     const useCases = getUseCases(request);
     return useCases.getStravaStatus();

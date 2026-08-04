@@ -728,14 +728,16 @@ export class PostgresRepository implements ApplicationRepository {
       .where(and(eq(stravaWebhookEvents.objectType, "activity"), eq(stravaWebhookEvents.objectId, input.providerActivityId)));
   }
 
-  async deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void> {
+  async deleteStravaDataForUser(input: { userId: string; athleteId: string | null }): Promise<void> {
     const rows = await this.db
       .select({ id: importedActivities.id })
       .from(importedActivities)
       .innerJoin(riderProfiles, eq(importedActivities.riderId, riderProfiles.id))
       .where(and(eq(riderProfiles.userId, input.userId), eq(importedActivities.provider, "strava")));
     await this.purgeImportedActivities(rows.map((row) => row.id), new Date());
-    await this.db.delete(stravaWebhookEvents).where(eq(stravaWebhookEvents.ownerId, input.athleteId));
+    if (input.athleteId) {
+      await this.db.delete(stravaWebhookEvents).where(eq(stravaWebhookEvents.ownerId, input.athleteId));
+    }
   }
 
   async deleteExpiredStravaData(input: { cutoff: Date; effectiveAt: Date }): Promise<StravaDataRetentionResult> {
