@@ -176,7 +176,7 @@ export class HttpStravaGateway implements StravaGateway {
   }
 
   async listRecentActivities(input: { accessToken: string }): Promise<readonly StravaActivitySummary[]> {
-    const response = await fetch("https://api-v3.strava.com/athlete/activities?per_page=30", {
+    const response = await fetch("https://www.strava.com/api/v3/athlete/activities?per_page=30", {
       headers: { authorization: `Bearer ${input.accessToken}` }
     });
 
