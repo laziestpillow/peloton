@@ -10,6 +10,7 @@ const envBoolean = z.preprocess((value) => {
 const defaultFixtureAuthTokens = "user-001:dev-token-user-001,user-002:dev-token-user-002,user-003:dev-token-user-003";
 const defaultDatabaseUrl = "postgres://peloton:peloton@127.0.0.1:5432/peloton";
 const defaultTokenEncryptionKey = "0000000000000000000000000000000000000000000000000000000000000000";
+const defaultStravaApiBaseUrl = "https://api-v3.strava.com";
 
 function isLocalHostname(hostname: string): boolean {
   return ["127.0.0.1", "localhost", "::1"].includes(hostname);
@@ -35,6 +36,7 @@ const envSchema = z.object({
   STRAVA_CLIENT_SECRET: z.string().optional(),
   STRAVA_CALLBACK_URL: z.string().url().default("http://127.0.0.1:8080/v1/auth/strava/callback"),
   STRAVA_WEBHOOK_CALLBACK_URL: z.string().url().default("http://127.0.0.1:8080/v1/webhooks/strava"),
+  STRAVA_API_BASE_URL: z.string().url().default(defaultStravaApiBaseUrl),
   STRAVA_WEBHOOK_VERIFY_TOKEN: z.string().default(""),
   STRAVA_OAUTH_SCOPE: z.string().default("read,activity:read_all"),
   STRAVA_OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
@@ -80,7 +82,7 @@ const envSchema = z.object({
     });
   }
 
-  for (const key of ["STRAVA_CALLBACK_URL", "STRAVA_WEBHOOK_CALLBACK_URL"] as const) {
+  for (const key of ["STRAVA_CALLBACK_URL", "STRAVA_WEBHOOK_CALLBACK_URL", "STRAVA_API_BASE_URL"] as const) {
     if (isLocalHostname(new URL(value[key]).hostname)) {
       context.addIssue({
         code: "custom",

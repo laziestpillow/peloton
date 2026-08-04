@@ -20,6 +20,7 @@ const config: AppConfig = {
   LOG_LEVEL: "silent",
   STRAVA_CLIENT_ID: "12345",
   STRAVA_CLIENT_SECRET: "test-secret",
+  STRAVA_API_BASE_URL: "https://api-v3.strava.com",
   STRAVA_CALLBACK_URL: "http://127.0.0.1:8080/v1/auth/strava/callback",
   STRAVA_WEBHOOK_CALLBACK_URL: "http://127.0.0.1:8080/v1/webhooks/strava",
   STRAVA_WEBHOOK_VERIFY_TOKEN: "dev-strava-webhook-token",

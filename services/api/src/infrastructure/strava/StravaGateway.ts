@@ -39,6 +39,8 @@ export interface StravaWebhookSubscription {
   updatedAt: Date;
 }
 
+const defaultStravaApiBaseUrl = "https://api-v3.strava.com";
+
 export interface StravaGateway {
   exchangeAuthorizationCode(input: {
     clientId: string;
@@ -135,6 +137,19 @@ function streamData(payload: unknown, key: string): unknown {
 }
 
 export class HttpStravaGateway implements StravaGateway {
+  private readonly apiBaseUrl: URL;
+
+  constructor(options: { apiBaseUrl?: string } = {}) {
+    this.apiBaseUrl = new URL(options.apiBaseUrl ?? defaultStravaApiBaseUrl);
+    if (!this.apiBaseUrl.pathname.endsWith("/")) {
+      this.apiBaseUrl.pathname = `${this.apiBaseUrl.pathname}/`;
+    }
+  }
+
+  private apiUrl(path: string): URL {
+    return new URL(path.replace(/^\/+/u, ""), this.apiBaseUrl);
+  }
+
   async exchangeAuthorizationCode(input: {
     clientId: string;
     clientSecret: string;
@@ -176,7 +191,9 @@ export class HttpStravaGateway implements StravaGateway {
   }
 
   async listRecentActivities(input: { accessToken: string }): Promise<readonly StravaActivitySummary[]> {
-    const response = await fetch("https://www.strava.com/api/v3/athlete/activities?per_page=30", {
+    const url = this.apiUrl("/athlete/activities");
+    url.searchParams.set("per_page", "30");
+    const response = await fetch(url, {
       headers: { authorization: `Bearer ${input.accessToken}` }
     });
 
@@ -213,7 +230,7 @@ export class HttpStravaGateway implements StravaGateway {
   }
 
   async getActivity(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivitySummary | null> {
-    const response = await fetch(`https://www.strava.com/api/v3/activities/${encodeURIComponent(input.providerActivityId)}`, {
+    const response = await fetch(this.apiUrl(`/activities/${encodeURIComponent(input.providerActivityId)}`), {
       headers: { authorization: `Bearer ${input.accessToken}` }
     });
 
@@ -251,7 +268,9 @@ export class HttpStravaGateway implements StravaGateway {
 
   async getActivityStreams(input: { accessToken: string; providerActivityId: string }): Promise<StravaActivityStreams> {
     const keys = ["time", "distance", "latlng", "altitude", "velocity_smooth"].join(",");
-    const url = `https://www.strava.com/api/v3/activities/${encodeURIComponent(input.providerActivityId)}/streams?keys=${keys}&key_by_type=true`;
+    const url = this.apiUrl(`/activities/${encodeURIComponent(input.providerActivityId)}/streams`);
+    url.searchParams.set("keys", keys);
+    url.searchParams.set("key_by_type", "true");
     const response = await fetch(url, {
       headers: { authorization: `Bearer ${input.accessToken}` }
     });
@@ -349,7 +368,7 @@ export class HttpStravaGateway implements StravaGateway {
       callback_url: input.callbackUrl,
       verify_token: input.verifyToken
     });
-    const response = await fetch("https://www.strava.com/api/v3/push_subscriptions", {
+    const response = await fetch(this.apiUrl("/push_subscriptions"), {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body
@@ -365,7 +384,7 @@ export class HttpStravaGateway implements StravaGateway {
     clientId: string;
     clientSecret: string;
   }): Promise<readonly StravaWebhookSubscription[]> {
-    const url = new URL("https://www.strava.com/api/v3/push_subscriptions");
+    const url = this.apiUrl("/push_subscriptions");
     url.searchParams.set("client_id", input.clientId);
     url.searchParams.set("client_secret", input.clientSecret);
     const response = await fetch(url);
@@ -393,7 +412,7 @@ export class HttpStravaGateway implements StravaGateway {
     clientSecret: string;
     subscriptionId: number;
   }): Promise<void> {
-    const url = new URL(`https://www.strava.com/api/v3/push_subscriptions/${input.subscriptionId}`);
+    const url = this.apiUrl(`/push_subscriptions/${input.subscriptionId}`);
     url.searchParams.set("client_id", input.clientId);
     url.searchParams.set("client_secret", input.clientSecret);
     const response = await fetch(url, { method: "DELETE" });
