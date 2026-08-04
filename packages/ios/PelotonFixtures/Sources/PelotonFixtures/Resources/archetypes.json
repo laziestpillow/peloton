@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "seasonId": "season-001",
+      "riderId": "rider-001",
+      "archetype": "rookie",
+      "confidence": 0.33,
+      "sampleSize": 1,
+      "sprintRelativeScore": 1,
+      "climbRelativeScore": 0.8,
+      "shortEffortScore": 1,
+      "sustainedEffortScore": 1,
+      "effectiveAt": "2026-07-20T10:00:00Z",
+      "reasons": ["Minimum sample size has not been reached."]
+    }
+  ]
+}

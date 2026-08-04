@@ -13,3 +13,11 @@ import Testing
   #expect(activities.data.first?.id == "activity-001")
 }
 
+@Test func decodesFixtureStagesAndArchetypes() async throws {
+  let client = FixtureDataClient()
+  let stages = try await client.stages(groupId: "group-001")
+  let archetypes = try await client.archetypes(seasonId: "season-001")
+
+  #expect(stages.data.first?.id == "stage-001")
+  #expect(archetypes.data.first?.archetype == "rookie")
+}
