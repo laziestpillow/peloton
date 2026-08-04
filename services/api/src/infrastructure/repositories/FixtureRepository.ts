@@ -245,7 +245,43 @@ export class FixtureRepository implements ApplicationRepository {
     const providerKey = `${input.provider}:${input.providerActivityId}`;
     const existing = this.stravaActivities.get(providerKey);
     if (existing) {
-      this.stravaActivities.set(providerKey, { ...existing, importStatus: "failed" });
+      this.stravaActivities.delete(providerKey);
+      this.streamSamples.delete(existing.id);
+      for (const [key, result] of this.stageActivityResults) {
+        if (result.activityId === existing.id) {
+          this.stageActivityResults.delete(key);
+        }
+      }
+      for (const [key, crossing] of this.stageMarkerCrossings) {
+        if (crossing.activityId === existing.id) {
+          this.stageMarkerCrossings.delete(key);
+        }
+      }
+    }
+  }
+
+  async deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void> {
+    const riderIds = new Set(this.fixtureData.recap.riders.filter((rider) => rider.userId === input.userId).map((rider) => rider.id));
+    for (const [providerKey, activity] of this.stravaActivities) {
+      if (activity.provider === "strava" && riderIds.has(activity.riderId)) {
+        this.stravaActivities.delete(providerKey);
+        this.streamSamples.delete(activity.id);
+        for (const [key, result] of this.stageActivityResults) {
+          if (result.activityId === activity.id) {
+            this.stageActivityResults.delete(key);
+          }
+        }
+        for (const [key, crossing] of this.stageMarkerCrossings) {
+          if (crossing.activityId === activity.id) {
+            this.stageMarkerCrossings.delete(key);
+          }
+        }
+      }
+    }
+    for (let index = this.stravaWebhookEvents.length - 1; index >= 0; index -= 1) {
+      if (this.stravaWebhookEvents[index]?.event.ownerId === input.athleteId) {
+        this.stravaWebhookEvents.splice(index, 1);
+      }
     }
   }
 

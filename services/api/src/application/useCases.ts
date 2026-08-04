@@ -136,6 +136,7 @@ export interface ApplicationRepository {
   completeActivitySync(input: { syncId: string; userId: string; status: "completed" | "failed"; completedAt: Date }): Promise<void>;
   upsertImportedActivity(input: ImportedActivityInput, options?: { replaceExisting?: boolean }): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
   markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void>;
+  deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void>;
   replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void>;
   listMatchableStages(): Promise<readonly Stage[]>;
   listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]>;
@@ -655,6 +656,7 @@ export function createApplicationUseCases(
             accessTokenExpiresAt: now(),
             status: "revoked"
           });
+          await repository.deleteStravaDataForUser({ userId: connection.userId, athleteId: event.ownerId });
         }
       }
       return { status: "accepted" };

@@ -326,7 +326,46 @@ class InMemoryRepository implements ApplicationRepository {
   async markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void> {
     const existing = this.activities.get(input.providerActivityId);
     if (existing && existing.provider === input.provider) {
-      this.activities.set(input.providerActivityId, { ...existing, importStatus: "failed" });
+      this.activities.delete(input.providerActivityId);
+      this.streamSamples.delete(existing.id);
+      for (const [key, result] of this.stageActivityResults) {
+        if (result.activityId === existing.id) {
+          this.stageActivityResults.delete(key);
+        }
+      }
+      for (const [key, crossing] of this.stageMarkerCrossings) {
+        if (crossing.activityId === existing.id) {
+          this.stageMarkerCrossings.delete(key);
+        }
+      }
+    }
+  }
+
+  async deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void> {
+    const current = await this.getCurrentRider(input.userId);
+    if (!current) {
+      return;
+    }
+    for (const [providerActivityId, imported] of this.activities) {
+      if (imported.provider === "strava" && imported.riderId === current.id) {
+        this.activities.delete(providerActivityId);
+        this.streamSamples.delete(imported.id);
+        for (const [key, result] of this.stageActivityResults) {
+          if (result.activityId === imported.id) {
+            this.stageActivityResults.delete(key);
+          }
+        }
+        for (const [key, crossing] of this.stageMarkerCrossings) {
+          if (crossing.activityId === imported.id) {
+            this.stageMarkerCrossings.delete(key);
+          }
+        }
+      }
+    }
+    for (let index = this.stravaWebhookEvents.length - 1; index >= 0; index -= 1) {
+      if (this.stravaWebhookEvents[index]?.event.ownerId === input.athleteId) {
+        this.stravaWebhookEvents.splice(index, 1);
+      }
     }
   }
 
@@ -547,6 +586,21 @@ describe("application use cases", () => {
       statusCode: 403,
       code: "forbidden"
     });
+  });
+
+  test("shared stage responses expose Peloton race state without raw Strava fields", async () => {
+    const useCases = createApplicationUseCases(new InMemoryRepository(), "user-001", fixtureData);
+
+    const [recap, results] = await Promise.all([
+      useCases.getStageRecap("stage-001"),
+      useCases.getStageResults("stage-001")
+    ]);
+    const sharedPayload = JSON.stringify({ recap, results });
+
+    expect(sharedPayload).not.toContain("providerActivityId");
+    expect(sharedPayload).not.toContain("provider");
+    expect(sharedPayload).not.toContain("routeSummary");
+    expect(sharedPayload).not.toContain("polyline");
   });
 
   test("creates and completes Strava OAuth connection through durable state", async () => {
@@ -935,6 +989,32 @@ describe("application use cases", () => {
       importStatus: "processed",
       processedStageId: "stage-001"
     });
+    const imported = repository.activities.get("1360128428");
+    if (!imported) {
+      throw new Error("Expected imported Strava activity.");
+    }
+    await repository.replaceActivityStreamSamples({
+      activityId: imported.id,
+      samples: [
+        { sequence: 0, timeSeconds: 0, distanceMeters: 0, latitude: 41.38, longitude: 2.15, altitudeMeters: 32, velocityMetersPerSecond: 0 }
+      ]
+    });
+    await repository.saveActivityStageMatch({
+      activityId: imported.id,
+      riderId: imported.riderId,
+      stageId: "stage-001",
+      finishTimeSeconds: 1000,
+      matchedAt: new Date("2026-07-31T10:00:00.000Z"),
+      markerCrossings: [{
+        stageId: "stage-001",
+        markerId: "marker-sprint-001",
+        activityId: imported.id,
+        riderId: imported.riderId,
+        crossedAtSeconds: 120,
+        rank: 1,
+        points: 20
+      }]
+    });
     const useCases = createApplicationUseCases(repository, "user-001", fixtureData, createStravaServices());
 
     await useCases.receiveStravaWebhook({
@@ -945,10 +1025,10 @@ describe("application use cases", () => {
       subscription_id: 120475,
       event_time: 1516126040
     });
-    expect(repository.activities.get("1360128428")).toMatchObject({
-      importStatus: "failed",
-      processedStageId: "stage-001"
-    });
+    expect(repository.activities.has("1360128428")).toBe(false);
+    expect(repository.streamSamples.has(imported.id)).toBe(false);
+    expect(repository.stageActivityResults.has("stage-001:rider-001")).toBe(false);
+    expect([...repository.stageMarkerCrossings.values()].some((crossing) => crossing.activityId === imported.id)).toBe(false);
 
     await useCases.receiveStravaWebhook({
       object_type: "athlete",
@@ -963,5 +1043,6 @@ describe("application use cases", () => {
     expect(connection).toMatchObject({ status: "revoked" });
     expect(tokenCipher.decrypt(connection?.encryptedAccessToken ?? "")).toBe("revoked");
     expect(tokenCipher.decrypt(connection?.encryptedRefreshToken ?? "")).toBe("revoked");
+    expect(repository.stravaWebhookEvents).toHaveLength(0);
   });
 });

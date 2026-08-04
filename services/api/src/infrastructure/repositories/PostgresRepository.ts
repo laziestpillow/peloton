@@ -291,6 +291,109 @@ function toStravaConnection(row: typeof stravaConnections.$inferSelect): StravaC
 export class PostgresRepository implements ApplicationRepository {
   constructor(private readonly db: Database) {}
 
+  private async rematerializeStageOutputs(stageId: string, effectiveAt: Date): Promise<void> {
+    const [stageRow] = await this.db.select().from(stages).where(eq(stages.id, stageId)).limit(1);
+    if (!stageRow) {
+      return;
+    }
+
+    const [markerRows, resultRows, crossingRows] = await Promise.all([
+      this.db.select().from(stageMarkers).where(eq(stageMarkers.stageId, stageId)).orderBy(asc(stageMarkers.sequence)),
+      this.db.select().from(stageActivityResults).where(eq(stageActivityResults.stageId, stageId)),
+      this.db.select().from(stageMarkerCrossings).where(eq(stageMarkerCrossings.stageId, stageId))
+    ]);
+    const stageResults = materializeStageResults(
+      toStage(stageRow, [], markerRows),
+      resultRows.map((result) => ({
+        riderId: result.riderId,
+        finishTimeSeconds: result.finishTimeSeconds
+      })),
+      crossingRows.map(toStageMarkerCrossing)
+    );
+
+    await this.db.delete(stageClassifications).where(eq(stageClassifications.stageId, stageId));
+    if (stageResults.classifications.length > 0) {
+      await this.db.insert(stageClassifications).values(stageResults.classifications.map((score) => ({
+        stageId: score.stageId,
+        riderId: score.riderId,
+        sprintPoints: score.sprintPoints,
+        komPoints: score.komPoints,
+        finishBonus: score.finishBonus,
+        todayTotal: score.todayTotal,
+        gcTimeSeconds: score.gcTimeSeconds
+      })));
+    }
+
+    const previousRows = await this.db.select().from(seasonStandings).where(eq(seasonStandings.seasonId, stageRow.seasonId));
+    const previousRanks = new Map(previousRows.map((standing) => [standing.riderId, standing.rank]));
+    const seasonScoreRows = await this.db
+      .select({ classification: stageClassifications })
+      .from(stageClassifications)
+      .innerJoin(stages, eq(stageClassifications.stageId, stages.id))
+      .where(eq(stages.seasonId, stageRow.seasonId));
+    const standings = materializeSeasonStandings(
+      stageRow.seasonId,
+      seasonScoreRows.map((row) => toStageScore(row.classification)),
+      [...previousRanks.entries()].map(([riderId, rank]) => ({ riderId, rank }))
+    ).standings;
+
+    await this.db.delete(seasonStandings).where(eq(seasonStandings.seasonId, stageRow.seasonId));
+    if (standings.length > 0) {
+      await this.db.insert(seasonStandings).values(standings.map((standing) => ({
+        seasonId: standing.seasonId,
+        riderId: standing.riderId,
+        seasonTotal: standing.seasonTotal,
+        rank: standing.rank,
+        previousRank: standing.previousRank
+      })));
+    }
+
+    const previousSnapshotRows = await this.db.select().from(archetypeSnapshots).where(eq(archetypeSnapshots.seasonId, stageRow.seasonId));
+    const snapshots = materializeArchetypeSnapshots(
+      stageRow.seasonId,
+      seasonScoreRows.map((row) => toStageScore(row.classification)),
+      effectiveAt,
+      previousSnapshotRows.map(toArchetypeSnapshot)
+    );
+    await this.db.delete(archetypeSnapshots).where(eq(archetypeSnapshots.seasonId, stageRow.seasonId));
+    if (snapshots.length > 0) {
+      await this.db.insert(archetypeSnapshots).values(snapshots.map((snapshot) => ({
+        seasonId: snapshot.seasonId,
+        riderId: snapshot.riderId,
+        archetype: snapshot.archetype,
+        confidence: snapshot.confidence,
+        sampleSize: snapshot.sampleSize,
+        sprintRelativeScore: snapshot.sprintRelativeScore,
+        climbRelativeScore: snapshot.climbRelativeScore,
+        shortEffortScore: snapshot.shortEffortScore,
+        sustainedEffortScore: snapshot.sustainedEffortScore,
+        effectiveAt: new Date(snapshot.effectiveAt),
+        reasons: snapshot.reasons
+      })));
+    }
+  }
+
+  private async purgeImportedActivities(activityIds: readonly string[], effectiveAt: Date): Promise<void> {
+    if (activityIds.length === 0) {
+      return;
+    }
+
+    const [resultRows, crossingRows] = await Promise.all([
+      this.db.select({ stageId: stageActivityResults.stageId }).from(stageActivityResults).where(inArray(stageActivityResults.activityId, activityIds)),
+      this.db.select({ stageId: stageMarkerCrossings.stageId }).from(stageMarkerCrossings).where(inArray(stageMarkerCrossings.activityId, activityIds))
+    ]);
+    const affectedStageIds = [...new Set([...resultRows, ...crossingRows].map((row) => row.stageId))];
+
+    await this.db.delete(activityStreamSamples).where(inArray(activityStreamSamples.activityId, activityIds));
+    await this.db.delete(stageMarkerCrossings).where(inArray(stageMarkerCrossings.activityId, activityIds));
+    await this.db.delete(stageActivityResults).where(inArray(stageActivityResults.activityId, activityIds));
+    await this.db.delete(importedActivities).where(inArray(importedActivities.id, activityIds));
+
+    for (const stageId of affectedStageIds) {
+      await this.rematerializeStageOutputs(stageId, effectiveAt);
+    }
+  }
+
   async listActivities(userId: string): Promise<ActivityListResponse> {
     const rows = await this.db
       .select({ activity: importedActivities })
@@ -612,10 +715,24 @@ export class PostgresRepository implements ApplicationRepository {
   }
 
   async markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void> {
-    await this.db
-      .update(importedActivities)
-      .set({ importStatus: "failed" })
+    const rows = await this.db
+      .select({ id: importedActivities.id })
+      .from(importedActivities)
       .where(and(eq(importedActivities.provider, input.provider), eq(importedActivities.providerActivityId, input.providerActivityId)));
+    await this.purgeImportedActivities(rows.map((row) => row.id), new Date());
+    await this.db
+      .delete(stravaWebhookEvents)
+      .where(and(eq(stravaWebhookEvents.objectType, "activity"), eq(stravaWebhookEvents.objectId, input.providerActivityId)));
+  }
+
+  async deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void> {
+    const rows = await this.db
+      .select({ id: importedActivities.id })
+      .from(importedActivities)
+      .innerJoin(riderProfiles, eq(importedActivities.riderId, riderProfiles.id))
+      .where(and(eq(riderProfiles.userId, input.userId), eq(importedActivities.provider, "strava")));
+    await this.purgeImportedActivities(rows.map((row) => row.id), new Date());
+    await this.db.delete(stravaWebhookEvents).where(eq(stravaWebhookEvents.ownerId, input.athleteId));
   }
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
