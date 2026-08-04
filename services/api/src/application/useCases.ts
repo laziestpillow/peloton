@@ -99,6 +99,11 @@ export interface StravaWebhookEventInput {
   receivedAt: Date;
 }
 
+export interface StravaDataRetentionResult {
+  deletedActivities: number;
+  deletedWebhookEvents: number;
+}
+
 export interface ApplicationServices {
   stravaGateway: StravaGateway;
   tokenCipher: TokenCipher;
@@ -137,6 +142,7 @@ export interface ApplicationRepository {
   upsertImportedActivity(input: ImportedActivityInput, options?: { replaceExisting?: boolean }): Promise<{ activity: ImportedActivity; duplicate: boolean }>;
   markImportedActivityDeleted(input: { provider: "strava"; providerActivityId: string }): Promise<void>;
   deleteStravaDataForUser(input: { userId: string; athleteId: string }): Promise<void>;
+  deleteExpiredStravaData(input: { cutoff: Date; effectiveAt: Date }): Promise<StravaDataRetentionResult>;
   replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void>;
   listMatchableStages(): Promise<readonly Stage[]>;
   listStageMarkerCrossings(stageId: string): Promise<readonly StageMarkerCrossing[]>;

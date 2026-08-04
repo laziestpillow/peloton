@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import type {
   ActivitySyncStart,
   ActivityStageMatchInput,
@@ -9,6 +9,7 @@ import type {
   StravaConnection,
   StravaConnectionInput,
   StravaConnectionUpdate,
+  StravaDataRetentionResult,
   StravaWebhookEventInput,
   StravaOAuthState
 } from "../../application/useCases.js";
@@ -670,7 +671,8 @@ export class PostgresRepository implements ApplicationRepository {
             elevationGainMeters: input.elevationGainMeters,
             routeSummary: input.routeSummary,
             importStatus: input.importStatus,
-            processedStageId: input.processedStageId
+            processedStageId: input.processedStageId,
+            importedAt: new Date()
           })
           .where(eq(importedActivities.id, existing.id))
           .returning();
@@ -681,7 +683,7 @@ export class PostgresRepository implements ApplicationRepository {
       }
       const [row] = await this.db
         .update(importedActivities)
-        .set({ importStatus: "duplicate" })
+        .set({ importStatus: "duplicate", importedAt: new Date() })
         .where(eq(importedActivities.id, existing.id))
         .returning();
       if (!row) {
@@ -705,7 +707,8 @@ export class PostgresRepository implements ApplicationRepository {
         elevationGainMeters: input.elevationGainMeters,
         routeSummary: input.routeSummary,
         importStatus: input.importStatus,
-        processedStageId: input.processedStageId
+        processedStageId: input.processedStageId,
+        importedAt: new Date()
       })
       .returning();
     if (!row) {
@@ -733,6 +736,24 @@ export class PostgresRepository implements ApplicationRepository {
       .where(and(eq(riderProfiles.userId, input.userId), eq(importedActivities.provider, "strava")));
     await this.purgeImportedActivities(rows.map((row) => row.id), new Date());
     await this.db.delete(stravaWebhookEvents).where(eq(stravaWebhookEvents.ownerId, input.athleteId));
+  }
+
+  async deleteExpiredStravaData(input: { cutoff: Date; effectiveAt: Date }): Promise<StravaDataRetentionResult> {
+    const activityRows = await this.db
+      .select({ id: importedActivities.id })
+      .from(importedActivities)
+      .where(and(eq(importedActivities.provider, "strava"), lt(importedActivities.importedAt, input.cutoff)));
+    await this.purgeImportedActivities(activityRows.map((row) => row.id), input.effectiveAt);
+
+    const deletedWebhookRows = await this.db
+      .delete(stravaWebhookEvents)
+      .where(lt(stravaWebhookEvents.receivedAt, input.cutoff))
+      .returning({ id: stravaWebhookEvents.id });
+
+    return {
+      deletedActivities: activityRows.length,
+      deletedWebhookEvents: deletedWebhookRows.length
+    };
   }
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {

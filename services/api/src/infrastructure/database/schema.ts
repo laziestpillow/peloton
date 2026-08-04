@@ -94,7 +94,8 @@ export const importedActivities = pgTable("imported_activities", {
   elevationGainMeters: numeric("elevation_gain_meters", { mode: "number" }).notNull(),
   routeSummary: jsonb("route_summary").notNull(),
   importStatus: text("import_status").notNull(),
-  processedStageId: text("processed_stage_id")
+  processedStageId: text("processed_stage_id"),
+  importedAt: timestamp("imported_at", { withTimezone: true }).notNull()
 }, (table) => [unique().on(table.provider, table.providerActivityId)]);
 
 export const activityStreamSamples = pgTable("activity_stream_samples", {

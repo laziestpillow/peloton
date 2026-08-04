@@ -9,6 +9,7 @@ import type {
   StravaConnection,
   StravaConnectionInput,
   StravaConnectionUpdate,
+  StravaDataRetentionResult,
   StravaWebhookEventInput,
   StravaOAuthState
 } from "../../application/useCases.js";
@@ -33,6 +34,7 @@ export class FixtureRepository implements ApplicationRepository {
   private readonly stravaOAuthStates = new Map<string, StravaOAuthState>();
   private readonly stravaConnections = new Map<string, StravaConnection>();
   private readonly stravaActivities = new Map<string, ImportedActivity>();
+  private readonly stravaActivityImportedAt = new Map<string, Date>();
   private readonly streamSamples = new Map<string, readonly ActivityStreamSample[]>();
   private readonly stageActivityResults = new Map<string, StageActivityResult>();
   private readonly stageMarkerCrossings = new Map<string, StageMarkerCrossing>();
@@ -215,10 +217,12 @@ export class FixtureRepository implements ApplicationRepository {
           processedStageId: input.processedStageId
         };
         this.stravaActivities.set(providerKey, activity);
+        this.stravaActivityImportedAt.set(providerKey, new Date());
         return { activity, duplicate: false };
       }
       const duplicate = { ...existing, importStatus: "duplicate" as const };
       this.stravaActivities.set(providerKey, duplicate);
+      this.stravaActivityImportedAt.set(providerKey, new Date());
       return { activity: duplicate, duplicate: true };
     }
 
@@ -238,6 +242,7 @@ export class FixtureRepository implements ApplicationRepository {
       processedStageId: input.processedStageId
     };
     this.stravaActivities.set(providerKey, activity);
+    this.stravaActivityImportedAt.set(providerKey, new Date());
     return { activity, duplicate: false };
   }
 
@@ -246,6 +251,7 @@ export class FixtureRepository implements ApplicationRepository {
     const existing = this.stravaActivities.get(providerKey);
     if (existing) {
       this.stravaActivities.delete(providerKey);
+      this.stravaActivityImportedAt.delete(providerKey);
       this.streamSamples.delete(existing.id);
       for (const [key, result] of this.stageActivityResults) {
         if (result.activityId === existing.id) {
@@ -265,6 +271,7 @@ export class FixtureRepository implements ApplicationRepository {
     for (const [providerKey, activity] of this.stravaActivities) {
       if (activity.provider === "strava" && riderIds.has(activity.riderId)) {
         this.stravaActivities.delete(providerKey);
+        this.stravaActivityImportedAt.delete(providerKey);
         this.streamSamples.delete(activity.id);
         for (const [key, result] of this.stageActivityResults) {
           if (result.activityId === activity.id) {
@@ -283,6 +290,39 @@ export class FixtureRepository implements ApplicationRepository {
         this.stravaWebhookEvents.splice(index, 1);
       }
     }
+  }
+
+  async deleteExpiredStravaData(input: { cutoff: Date; effectiveAt: Date }): Promise<StravaDataRetentionResult> {
+    let deletedActivities = 0;
+    for (const [providerKey, activity] of this.stravaActivities) {
+      const importedAt = this.stravaActivityImportedAt.get(providerKey);
+      if (activity.provider === "strava" && importedAt && importedAt.getTime() < input.cutoff.getTime()) {
+        this.stravaActivities.delete(providerKey);
+        this.stravaActivityImportedAt.delete(providerKey);
+        this.streamSamples.delete(activity.id);
+        for (const [key, result] of this.stageActivityResults) {
+          if (result.activityId === activity.id) {
+            this.stageActivityResults.delete(key);
+          }
+        }
+        for (const [key, crossing] of this.stageMarkerCrossings) {
+          if (crossing.activityId === activity.id) {
+            this.stageMarkerCrossings.delete(key);
+          }
+        }
+        deletedActivities += 1;
+      }
+    }
+
+    let deletedWebhookEvents = 0;
+    for (let index = this.stravaWebhookEvents.length - 1; index >= 0; index -= 1) {
+      const webhookEvent = this.stravaWebhookEvents[index];
+      if (webhookEvent && webhookEvent.receivedAt.getTime() < input.cutoff.getTime()) {
+        this.stravaWebhookEvents.splice(index, 1);
+        deletedWebhookEvents += 1;
+      }
+    }
+    return { deletedActivities, deletedWebhookEvents };
   }
 
   async replaceActivityStreamSamples(input: ActivityStreamSamplesInput): Promise<void> {
