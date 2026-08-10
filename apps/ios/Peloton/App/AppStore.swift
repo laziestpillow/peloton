@@ -5,8 +5,6 @@ import PelotonAPIClient
 import PelotonCore
 import PelotonFixtures
 
-extension LiveAPIClient: PelotonDataClient {}
-
 @MainActor
 @Observable
 final class AppStore {

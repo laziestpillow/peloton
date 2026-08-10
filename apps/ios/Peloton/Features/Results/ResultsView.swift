@@ -8,44 +8,51 @@ struct ResultsView: View {
   var body: some View {
     NavigationStack {
       List {
-        if store.isLoading {
-          ProgressView("Loading results")
-        } else if store.results == nil && store.standings == nil {
-          ContentUnavailableView("No results", systemImage: "list.number")
+        Section {
+          ResultsRaceHeader(
+            riderCount: store.results?.classifications.count ?? 0,
+            markerCount: store.results?.markerResults.count ?? 0,
+            jerseyCount: store.results == nil ? 0 : 3,
+            stageName: selectedStage?.name ?? "Stage Results"
+          )
+          .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+          .listRowBackground(Color.clear)
+        }
+
+        if store.isLoading && store.results == nil && store.standings == nil {
+          Section("Results") {
+            LoadingResultsRow()
+          }
+        } else if isEmpty {
+          Section("Results") {
+            ContentUnavailableView(
+              "No results yet",
+              systemImage: "list.number",
+              description: Text("Stage and season results will appear after data is loaded.")
+            )
+          }
         } else {
-          Section("Stage Classification") {
-            ForEach(store.results?.classifications ?? [], id: \.riderId) { classification in
-              ResultRow(
-                rank: rank(for: classification),
-                rider: riderName(classification.riderId),
-                detail: "\(classification.todayTotal) pts - \(classification.gcTimeSeconds.duration)"
-              )
-            }
-          }
-
-          Section("Marker Winners") {
-            ForEach(store.results?.markerResults ?? [], id: \.markerId) { marker in
-              ForEach(marker.crossings.prefix(3), id: \.riderId) { crossing in
-                ResultRow(
-                  rank: crossing.rank,
-                  rider: riderName(crossing.riderId),
-                  detail: "\(marker.type.uppercased()) - \(crossing.points) pts - \(crossing.crossedAtSeconds.duration)"
-                )
+          if !jerseyLeaders.isEmpty {
+            Section("Jersey Leaders") {
+              ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                  ForEach(jerseyLeaders) { leader in
+                    JerseyLeaderCard(leader: leader)
+                      .frame(width: 155)
+                  }
+                }
+                .padding(.vertical, 4)
               }
+              .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 0))
             }
           }
 
-          Section("Season") {
-            ForEach(store.standings?.standings ?? [], id: \.riderId) { standing in
-              ResultRow(
-                rank: standing.rank,
-                rider: riderName(standing.riderId),
-                detail: "\(standing.seasonTotal) pts - \(archetype(for: standing.riderId))"
-              )
-            }
-          }
+          ResultSection(title: "Stage Classification", entries: stageEntries)
+          ResultSection(title: "Marker Winners", entries: markerEntries)
+          ResultSection(title: "Season", entries: seasonEntries)
         }
       }
+      .listStyle(.insetGrouped)
       .navigationTitle("Results")
       .refreshable {
         await store.loadInitialData()
@@ -53,14 +60,90 @@ struct ResultsView: View {
     }
   }
 
-  private func rank(for classification: StageClassification) -> Int {
-    let ordered = (store.results?.classifications ?? []).sorted {
-      if $0.todayTotal == $1.todayTotal {
-        return $0.gcTimeSeconds < $1.gcTimeSeconds
+  private var selectedStage: Stage? {
+    store.stages.first { $0.id == store.selectedStageId }
+  }
+
+  private var isEmpty: Bool {
+    stageEntries.isEmpty && markerEntries.isEmpty && seasonEntries.isEmpty
+  }
+
+  private var jerseyLeaders: [JerseyLeaderResult] {
+    guard let results = store.results else { return [] }
+
+    return [
+      JerseyLeaderResult(
+        jersey: .green,
+        rider: riderName(results.jerseyLeaders.green),
+        detail: stagePointsText(for: results.jerseyLeaders.green),
+        subtitle: "Points leader"
+      ),
+      JerseyLeaderResult(
+        jersey: .polkaDot,
+        rider: riderName(results.jerseyLeaders.polkaDot),
+        detail: komPointsText(for: results.jerseyLeaders.polkaDot),
+        subtitle: "Climber leader"
+      ),
+      JerseyLeaderResult(
+        jersey: .yellow,
+        rider: riderName(results.jerseyLeaders.yellow),
+        detail: timeText(for: results.jerseyLeaders.yellow),
+        subtitle: "Stage leader"
+      )
+    ]
+  }
+
+  private var stageEntries: [ResultEntry] {
+    guard let results = store.results else { return [] }
+
+    return results.classifications
+      .sorted {
+        if $0.todayTotal == $1.todayTotal {
+          return $0.gcTimeSeconds < $1.gcTimeSeconds
+        }
+        return $0.todayTotal > $1.todayTotal
       }
-      return $0.todayTotal > $1.todayTotal
+      .enumerated()
+      .map { index, classification in
+        ResultEntry(
+          rank: index + 1,
+          rider: riderName(classification.riderId),
+          detail: "\(classification.todayTotal) pts - \(archetype(for: classification.riderId))",
+          time: classification.gcTimeSeconds.duration
+        )
+      }
+  }
+
+  private var markerEntries: [ResultEntry] {
+    guard let results = store.results else { return [] }
+
+    return results.markerResults.compactMap { marker in
+      guard let winner = marker.crossings.min(by: { $0.rank < $1.rank }) else {
+        return nil
+      }
+
+      return ResultEntry(
+        rank: winner.rank,
+        rider: riderName(winner.riderId),
+        detail: marker.displayName,
+        time: "\(winner.points) pts"
+      )
     }
-    return (ordered.firstIndex(where: { $0.riderId == classification.riderId }) ?? 0) + 1
+  }
+
+  private var seasonEntries: [ResultEntry] {
+    guard let standings = store.standings else { return [] }
+
+    return standings.standings
+      .sorted { $0.rank < $1.rank }
+      .map { standing in
+        ResultEntry(
+          rank: standing.rank,
+          rider: riderName(standing.riderId),
+          detail: rankMovementText(current: standing.rank, previous: standing.previousRank),
+          time: "\(standing.seasonTotal) pts"
+        )
+      }
   }
 
   private func riderName(_ riderId: String) -> String {
@@ -73,36 +156,42 @@ struct ResultsView: View {
     }
     return "\(snapshot.archetype.capitalized) - \(Int(snapshot.confidence * 100))% confidence"
   }
-}
 
-struct ResultRow: View {
-  let rank: Int
-  let rider: String
-  let detail: String
-
-  var body: some View {
-    HStack(spacing: 12) {
-      Text("\(rank)")
-        .font(.headline.monospacedDigit())
-        .frame(width: 28, height: 28)
-        .background(.quaternary, in: Circle())
-      VStack(alignment: .leading) {
-        Text(rider).font(.headline)
-        Text(detail).font(.subheadline).foregroundStyle(.secondary)
-      }
+  private func stagePointsText(for riderId: String) -> String {
+    guard let classification = store.results?.classifications.first(where: { $0.riderId == riderId }) else {
+      return "0 pts"
     }
-    .accessibilityElement(children: .combine)
+    return "\(classification.sprintPoints) sprint pts"
   }
-}
 
-private extension Int {
-  var duration: String {
-    let hours = self / 3600
-    let minutes = (self % 3600) / 60
-    let seconds = self % 60
-    return hours > 0
-      ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
-      : String(format: "%d:%02d", minutes, seconds)
+  private func komPointsText(for riderId: String) -> String {
+    guard let classification = store.results?.classifications.first(where: { $0.riderId == riderId }) else {
+      return "0 KOM pts"
+    }
+    return "\(classification.komPoints) KOM pts"
+  }
+
+  private func timeText(for riderId: String) -> String {
+    guard let classification = store.results?.classifications.first(where: { $0.riderId == riderId }) else {
+      return "--"
+    }
+    return classification.gcTimeSeconds.duration
+  }
+
+  private func rankMovementText(current: Int, previous: Int?) -> String {
+    guard let previous else {
+      return "New entry"
+    }
+
+    if current < previous {
+      return "Up from #\(previous)"
+    }
+
+    if current > previous {
+      return "Down from #\(previous)"
+    }
+
+    return "Held #\(current)"
   }
 }
 

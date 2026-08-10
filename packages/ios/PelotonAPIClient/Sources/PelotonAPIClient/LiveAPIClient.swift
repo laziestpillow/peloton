@@ -1,7 +1,7 @@
 import Foundation
 import PelotonCore
 
-public struct LiveAPIClient: Sendable {
+public struct LiveAPIClient: PelotonDataClient, Sendable {
   private let baseURL: URL
   private let session: URLSession
   private let bearerToken: @Sendable () async -> String?
