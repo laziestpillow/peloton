@@ -22,6 +22,12 @@
     B10000000000000000000003 /* PelotonAPIClient in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000002 /* PelotonAPIClient */; };
     B10000000000000000000004 /* PelotonFixtures in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000003 /* PelotonFixtures */; };
     B10000000000000000000005 /* PelotonDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000004 /* PelotonDesignSystem */; };
+    C10000000000000000000001 /* RecapHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* RecapHeaderView.swift */; };
+    C10000000000000000000002 /* RecapTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* RecapTimelineView.swift */; };
+    C10000000000000000000003 /* RecapSupportingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000003 /* RecapSupportingViews.swift */; };
+    C10000000000000000000004 /* ResultsHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000004 /* ResultsHeaderView.swift */; };
+    C10000000000000000000005 /* ResultsJerseyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000005 /* ResultsJerseyViews.swift */; };
+    C10000000000000000000006 /* ResultsRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000006 /* ResultsRows.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +62,12 @@
     A20000000000000000000012 /* PelotonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PelotonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
     A20000000000000000000013 /* PelotonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PelotonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
     B20000000000000000000001 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/AppStore.swift; sourceTree = "<group>"; };
+    C20000000000000000000001 /* RecapHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Recap/RecapHeaderView.swift; sourceTree = "<group>"; };
+    C20000000000000000000002 /* RecapTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Recap/RecapTimelineView.swift; sourceTree = "<group>"; };
+    C20000000000000000000003 /* RecapSupportingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Recap/RecapSupportingViews.swift; sourceTree = "<group>"; };
+    C20000000000000000000004 /* ResultsHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Results/ResultsHeaderView.swift; sourceTree = "<group>"; };
+    C20000000000000000000005 /* ResultsJerseyViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Results/ResultsJerseyViews.swift; sourceTree = "<group>"; };
+    C20000000000000000000006 /* ResultsRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Results/ResultsRows.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,7 +97,13 @@
         A20000000000000000000004 /* GarageView.swift */,
         A20000000000000000000005 /* ActivitiesView.swift */,
         A20000000000000000000006 /* RecapView.swift */,
+        C20000000000000000000001 /* RecapHeaderView.swift */,
+        C20000000000000000000002 /* RecapTimelineView.swift */,
+        C20000000000000000000003 /* RecapSupportingViews.swift */,
         A20000000000000000000007 /* ResultsView.swift */,
+        C20000000000000000000004 /* ResultsHeaderView.swift */,
+        C20000000000000000000005 /* ResultsJerseyViews.swift */,
+        C20000000000000000000006 /* ResultsRows.swift */,
         A20000000000000000000008 /* Assets.xcassets */,
       );
       path = Peloton;
@@ -186,7 +204,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-    A90000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, B10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007); runOnlyForDeploymentPostprocessing = 0; };
+    A90000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, B10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, C10000000000000000000001, C10000000000000000000002, C10000000000000000000003, A10000000000000000000007, C10000000000000000000004, C10000000000000000000005, C10000000000000000000006); runOnlyForDeploymentPostprocessing = 0; };
     A90000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000009); runOnlyForDeploymentPostprocessing = 0; };
     A90000000000000000000003 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000010); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
